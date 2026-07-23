@@ -27,8 +27,16 @@ Easypanel jala el código desde un repositorio. Sube esta carpeta tal cual
 ## 2. Crea el servicio en Easypanel
 1. En tu proyecto de Easypanel, **Create Service > App**.
 2. Fuente: conecta tu repo de Git.
-3. **Build**: tipo "Dockerfile", con contexto/ruta `backend` (ahí está el
-   `Dockerfile`).
+3. **Build**: tipo "Dockerfile", **Ruta de compilación** `backend` y
+   **Archivo** `Dockerfile` (ahí está el `Dockerfile`, dentro de `backend/`).
+
+   > ⚠️ **Error común**: si dejas la Ruta de compilación en `/` y el Archivo
+   > en `docker-compose.yml`, Easypanel va a intentar compilar el
+   > `docker-compose.yml` como si fuera un Dockerfile y falla con
+   > `unknown instruction: version:`. Un `docker-compose.yml` **no es** un
+   > Dockerfile — o usas el método "Dockerfile" apuntando a `backend/Dockerfile`
+   > (este paso), o usas el tipo de servicio "App > Compose" con el
+   > `docker-compose.yml` (ver paso 4 más abajo). No mezcles los dos.
 4. **Puerto**: 3000 (Easypanel lo detecta o lo pones manual en "Ports").
 5. **Dominio**: en la pestaña "Domains", agrega tu dominio o subdominio
    (ej. `reparto.tuempresa.com`) y activa HTTPS — Easypanel genera el
