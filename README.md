@@ -9,9 +9,14 @@ App para:
 ## Estructura
 ```
 delivery-tracker/
+  Dockerfile                 <- Dockerfile en la raiz, listo para Easypanel
+                                (metodo de build "Dockerfile", sin tocar
+                                Ruta de compilacion / Archivo)
   backend/                  <- servidor Node.js (API + panel admin + PWA repartidor)
-                                incluye Dockerfile listo para Easypanel
-  docker-compose.yml         <- servicio principal "app" (esto es lo que usa Easypanel)
+                                incluye su propio Dockerfile (usado por
+                                docker-compose.yml para desarrollo local)
+  docker-compose.yml         <- servicio principal "app" (para correrlo tu
+                                mismo o pegarlo en Easypanel como "App > Compose")
   docker-compose.osrm.yml    <- OSRM opcional (motor de rutas por calles reales)
   osrm-data/                 <- aquí van los datos de mapa para OSRM (opcional)
 ```
@@ -27,16 +32,16 @@ Easypanel jala el código desde un repositorio. Sube esta carpeta tal cual
 ## 2. Crea el servicio en Easypanel
 1. En tu proyecto de Easypanel, **Create Service > App**.
 2. Fuente: conecta tu repo de Git.
-3. **Build**: tipo "Dockerfile", **Ruta de compilación** `backend` y
-   **Archivo** `Dockerfile` (ahí está el `Dockerfile`, dentro de `backend/`).
+3. **Build**: tipo "Dockerfile", **Ruta de compilación** `/` y
+   **Archivo** `Dockerfile` (son los valores por default — hay un
+   `Dockerfile` en la raíz del repo, no hace falta escribir `backend/nada`).
 
-   > ⚠️ **Error común**: si dejas la Ruta de compilación en `/` y el Archivo
-   > en `docker-compose.yml`, Easypanel va a intentar compilar el
-   > `docker-compose.yml` como si fuera un Dockerfile y falla con
-   > `unknown instruction: version:`. Un `docker-compose.yml` **no es** un
-   > Dockerfile — o usas el método "Dockerfile" apuntando a `backend/Dockerfile`
-   > (este paso), o usas el tipo de servicio "App > Compose" con el
-   > `docker-compose.yml` (ver paso 4 más abajo). No mezcles los dos.
+   > ⚠️ **Error común**: si el Archivo dice `docker-compose.yml`, Easypanel
+   > va a intentar compilar ese archivo como si fuera un Dockerfile y falla
+   > con `unknown instruction: version:`. Un `docker-compose.yml` **no es**
+   > un Dockerfile — o usas el método "Dockerfile" apuntando al `Dockerfile`
+   > de la raíz (este paso), o usas el tipo de servicio "App > Compose" con
+   > el `docker-compose.yml` (ver paso 4 más abajo). No mezcles los dos.
 4. **Puerto**: 3000 (Easypanel lo detecta o lo pones manual en "Ports").
 5. **Dominio**: en la pestaña "Domains", agrega tu dominio o subdominio
    (ej. `reparto.tuempresa.com`) y activa HTTPS — Easypanel genera el
