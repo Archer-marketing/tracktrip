@@ -1,0 +1,9 @@
+{
+  "name": "Repartidor - Tracking",
+  "short_name": "Repartidor",
+  "start_url": "/driver/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1d4ed8",
+  "icons": []
+}

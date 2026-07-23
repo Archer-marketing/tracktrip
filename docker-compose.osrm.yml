@@ -1,0 +1,22 @@
+version: "3.8"
+
+# OPCIONAL. Usa esto solo despues de preparar los datos del mapa
+# (ver seccion "Motor de rutas real (OSRM)" en README.md).
+#
+# En Easypanel: crea un servicio nuevo tipo "App > Compose" separado,
+# pega este archivo, y sube la carpeta osrm-data/ con los archivos ya
+# procesados (map.osrm*) a un volumen o bind mount.
+#
+# Luego, en el servicio "app" (el otro compose), agrega/edita la variable
+# de entorno: OSRM_URL=http://<nombre-del-servicio-osrm-en-easypanel>:5000
+
+services:
+  osrm:
+    image: osrm/osrm-backend
+    container_name: osrm
+    command: osrm-routed --algorithm mld /data/map.osrm
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./osrm-data:/data

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Repartidor</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#1d4ed8" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, system-ui, sans-serif;
+    background: #0f172a; color: #f1f5f9; min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  .header { padding: 16px; background: #1e293b; text-align: center; font-weight: 700; font-size: 18px; }
+  .status { padding: 8px 16px; text-align: center; font-size: 13px; }
+  .status.on { color: #4ade80; }
+  .status.off { color: #f87171; }
+  #login { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+  input { padding: 14px; font-size: 18px; border-radius: 10px; border: none; }
+  button {
+    padding: 16px; font-size: 17px; border-radius: 10px; border: none;
+    background: #2563eb; color: white; font-weight: 600;
+  }
+  button:active { background: #1d4ed8; }
+  #app { display: none; flex: 1; flex-direction: column; padding: 16px; gap: 16px; }
+  .card { background: #1e293b; border-radius: 16px; padding: 20px; }
+  .card h2 { margin: 0 0 8px; font-size: 20px; }
+  .card p { margin: 4px 0; color: #cbd5e1; }
+  .maps-btn { background: #16a34a; margin-top: 12px; }
+  .done-btn { background: #64748b; margin-top: 8px; }
+  .remaining { font-size: 13px; color: #94a3b8; text-align: center; }
+  .empty { text-align: center; color: #94a3b8; padding: 40px 0; }
+</style>
+</head>
+<body>
+  <div class="header">🚚 Repartidor</div>
+  <div id="statusBar" class="status off">Ubicación: inactiva</div>
+
+  <div id="login">
+    <input id="code" placeholder="Tu código de acceso" autocomplete="off" />
+    <button onclick="login()">Entrar</button>
+  </div>
+
+  <div id="app">
+    <div id="stopCard"></div>
+    <div class="remaining" id="remaining"></div>
+  </div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

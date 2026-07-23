@@ -1,0 +1,27 @@
+version: "3.8"
+
+# Servicio principal. Esto es lo que pegas en Easypanel como "App > Compose"
+# (o corres tu mismo con: docker compose up -d --build).
+# Funciona solo, sin OSRM (usa distancia en linea recta como motor de rutas).
+# Si despues quieres rutas por calles reales, agrega docker-compose.osrm.yml
+# (ver instrucciones en README.md).
+
+services:
+  app:
+    build:
+      context: ./backend
+    container_name: delivery-tracker-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - SQLITE_PATH=/app/data/data.sqlite
+      # El resto de variables (ADMIN_PASSWORD, KOMMO_*, OSRM_URL, etc.)
+      # se configuran desde el panel de Easypanel (pestana "Environment"),
+      # no hace falta un archivo .env dentro del contenedor.
+    volumes:
+      - app-data:/app/data
+
+volumes:
+  app-data:
