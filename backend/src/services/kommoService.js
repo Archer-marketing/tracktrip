@@ -120,7 +120,10 @@ async function syncFromKommo() {
 
       if (lat == null || lng == null) {
         results.skipped++;
-        results.errors.push(`Lead ${lead.id} (${lead.name}): sin direccion valida`);
+        const reason = !latlngRaw && !address
+          ? 'no se encontro el campo de direccion ni de lat/lng en el lead (revisa KOMMO_ADDRESS_FIELD_ID / KOMMO_LATLNG_FIELD_ID)'
+          : `no se pudo geocodificar la direccion "${address}"`;
+        results.errors.push(`Lead ${lead.id} (${lead.name}): ${reason}`);
         continue;
       }
 

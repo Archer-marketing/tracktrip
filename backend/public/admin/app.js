@@ -120,7 +120,11 @@ async function syncKommo() {
   btn.textContent = 'Sincronizando...';
   try {
     const result = await api('/api/admin/sync-kommo', { method: 'POST' });
-    alert(`Sincronizados: ${result.synced}, geocodificados: ${result.geocoded}, con error: ${result.skipped}`);
+    let msg = `Sincronizados: ${result.synced}, geocodificados: ${result.geocoded}, con error: ${result.skipped}`;
+    if (result.errors && result.errors.length) {
+      msg += `\n\nPrimeros errores:\n${result.errors.slice(0, 5).join('\n')}`;
+    }
+    alert(msg);
     await loadStops();
   } catch (e) {
     alert('Error al sincronizar: ' + e.message);
