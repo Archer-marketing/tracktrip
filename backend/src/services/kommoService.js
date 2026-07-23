@@ -18,6 +18,22 @@ function extractCustomField(lead, fieldId) {
   return cf.values[0].value;
 }
 
+// Acepta "lat,lng" plano o un link de Google Maps (extrae !3d..!4d.. o @lat,lng,zoom).
+function parseLatLng(raw) {
+  if (!raw) return null;
+
+  const dataMatch = raw.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (dataMatch) return { lat: parseFloat(dataMatch[1]), lng: parseFloat(dataMatch[2]) };
+
+  const atMatch = raw.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) };
+
+  const plainMatch = raw.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
+  if (plainMatch) return { lat: parseFloat(plainMatch[1]), lng: parseFloat(plainMatch[2]) };
+
+  return null;
+}
+
 // Trae los leads del pipeline/status configurado como "listos para entregar"
 // y los sincroniza como customers + stops pendientes.
 async function syncFromKommo() {
@@ -54,10 +70,10 @@ async function syncFromKommo() {
       let lng = null;
 
       const latlngRaw = extractCustomField(lead, process.env.KOMMO_LATLNG_FIELD_ID);
-      if (latlngRaw && latlngRaw.includes(',')) {
-        const [la, ln] = latlngRaw.split(',').map((s) => parseFloat(s.trim()));
-        lat = la;
-        lng = ln;
+      const parsed = parseLatLng(latlngRaw);
+      if (parsed) {
+        lat = parsed.lat;
+        lng = parsed.lng;
       } else if (address) {
         const geo = await geocodeAddress(address);
         if (geo) {
