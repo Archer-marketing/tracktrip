@@ -37,6 +37,7 @@ async function init() {
 
   await loadDrivers();
   await loadStops();
+  await loadKommoPipelines();
 
   const socket = io();
   socket.on('admin:driverUpdate', ({ driver_id, lat, lng }) => {
@@ -112,6 +113,51 @@ async function loadStops() {
 function toggleStop(id, checked) {
   if (checked) selectedStops.add(id);
   else selectedStops.delete(id);
+}
+
+let kommoPipelines = [];
+
+async function loadKommoPipelines() {
+  try {
+    kommoPipelines = await api('/api/admin/kommo/pipelines');
+    const current = await api('/api/admin/kommo/status-filter');
+
+    const pipelineSelect = document.getElementById('pipelineSelect');
+    pipelineSelect.innerHTML = kommoPipelines
+      .map((p) => `<option value="${p.id}">${p.name}</option>`)
+      .join('');
+
+    if (current.pipeline_id) pipelineSelect.value = current.pipeline_id;
+    renderStatusOptions(current.status_id);
+  } catch (e) {
+    console.error('No se pudieron cargar los embudos de Kommo', e);
+  }
+}
+
+function renderStatusOptions(selectedStatusId) {
+  const pipelineSelect = document.getElementById('pipelineSelect');
+  const statusSelect = document.getElementById('statusSelect');
+  const pipeline = kommoPipelines.find((p) => String(p.id) === String(pipelineSelect.value));
+  const statuses = pipeline ? pipeline.statuses : [];
+  statusSelect.innerHTML = statuses
+    .map((s) => `<option value="${s.id}">${s.name}</option>`)
+    .join('');
+  if (selectedStatusId) statusSelect.value = selectedStatusId;
+}
+
+function onPipelineChange() {
+  renderStatusOptions();
+}
+
+async function saveKommoFilter() {
+  const pipeline_id = document.getElementById('pipelineSelect').value;
+  const status_id = document.getElementById('statusSelect').value;
+  if (!pipeline_id || !status_id) return alert('Elige un embudo y una etapa');
+  await api('/api/admin/kommo/status-filter', {
+    method: 'POST',
+    body: JSON.stringify({ pipeline_id, status_id }),
+  });
+  alert('Guardado. La proxima sincronizacion usara este embudo/etapa.');
 }
 
 async function syncKommo() {

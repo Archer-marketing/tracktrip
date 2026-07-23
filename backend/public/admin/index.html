@@ -37,6 +37,11 @@
     <h3>Repartidores</h3>
     <div id="drivers"></div>
 
+    <h3>Kommo: embudo y etapa</h3>
+    <select id="pipelineSelect" onchange="onPipelineChange()"></select>
+    <select id="statusSelect"></select>
+    <button onclick="saveKommoFilter()">💾 Guardar embudo/etapa</button>
+
     <button onclick="syncKommo()">🔄 Sincronizar pedidos desde Kommo</button>
 
     <h3>Pedidos pendientes</h3>

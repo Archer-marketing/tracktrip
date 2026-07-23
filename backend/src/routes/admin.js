@@ -1,6 +1,11 @@
 const express = require('express');
 const db = require('../db');
-const { syncFromKommo } = require('../services/kommoService');
+const {
+  syncFromKommo,
+  getPipelines,
+  getSyncStatusFilter,
+  setSyncStatusFilter,
+} = require('../services/kommoService');
 const { optimizeRoute } = require('../services/routingService');
 
 const router = express.Router();
@@ -42,6 +47,27 @@ router.post('/sync-kommo', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// --- Kommo: embudos/etapas para elegir cual sincronizar ---
+router.get('/kommo/pipelines', async (req, res) => {
+  try {
+    const pipelines = await getPipelines();
+    res.json(pipelines);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/kommo/status-filter', (req, res) => {
+  res.json(getSyncStatusFilter());
+});
+
+router.post('/kommo/status-filter', (req, res) => {
+  const { pipeline_id, status_id } = req.body;
+  if (!pipeline_id || !status_id) return res.status(400).json({ error: 'Faltan datos' });
+  setSyncStatusFilter(pipeline_id, status_id);
+  res.json({ ok: true });
 });
 
 // --- Customers / stops pendientes ---

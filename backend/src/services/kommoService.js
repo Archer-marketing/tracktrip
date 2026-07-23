@@ -1,12 +1,37 @@
 const axios = require('axios');
 const db = require('../db');
 const { geocodeAddress } = require('./geocodeService');
+const { getSetting, setSetting } = require('./settingsService');
 
 function kommoClient() {
   return axios.create({
     baseURL: `https://${process.env.KOMMO_SUBDOMAIN}.kommo.com/api/v4`,
     headers: { Authorization: `Bearer ${process.env.KOMMO_ACCESS_TOKEN}` },
   });
+}
+
+// Embudos (pipelines) y etapas (statuses) de la cuenta, para el selector del panel.
+async function getPipelines() {
+  const client = kommoClient();
+  const { data } = await client.get('/leads/pipelines');
+  const pipelines = data?._embedded?.pipelines || [];
+  return pipelines.map((p) => ({
+    id: p.id,
+    name: p.name,
+    statuses: (p._embedded?.statuses || []).map((s) => ({ id: s.id, name: s.name })),
+  }));
+}
+
+function getSyncStatusFilter() {
+  return {
+    pipeline_id: getSetting('kommo_pipeline_id'),
+    status_id: getSetting('kommo_status_id'),
+  };
+}
+
+function setSyncStatusFilter(pipelineId, statusId) {
+  setSetting('kommo_pipeline_id', String(pipelineId));
+  setSetting('kommo_status_id', String(statusId));
 }
 
 function extractCustomField(lead, fieldId) {
@@ -74,7 +99,14 @@ async function parseLatLng(raw) {
 async function syncFromKommo() {
   const client = kommoClient();
   const params = { with: 'contacts', limit: 250 };
-  if (process.env.KOMMO_STATUS_ID) {
+
+  const { pipeline_id, status_id } = getSyncStatusFilter();
+  if (pipeline_id && status_id) {
+    // Kommo pide pipeline_id + status_id juntos para filtrar una etapa especifica.
+    params['filter[statuses][0][pipeline_id]'] = pipeline_id;
+    params['filter[statuses][0][status_id]'] = status_id;
+  } else if (process.env.KOMMO_STATUS_ID) {
+    // Compatibilidad con la variable de entorno anterior (sin pipeline_id).
     params['filter[statuses][0][status_id]'] = process.env.KOMMO_STATUS_ID;
   }
 
@@ -151,4 +183,4 @@ async function syncFromKommo() {
   return results;
 }
 
-module.exports = { syncFromKommo };
+module.exports = { syncFromKommo, getPipelines, getSyncStatusFilter, setSyncStatusFilter };

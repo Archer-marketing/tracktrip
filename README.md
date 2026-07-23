@@ -170,14 +170,14 @@ pm2 startup
      https://tuempresa.kommo.com/api/v4/leads/custom_fields
    ```
    Busca el campo de dirección y copia su `"id"` a `KOMMO_ADDRESS_FIELD_ID`.
-4. (Opcional) Si quieres sincronizar solo los leads en un estado/pipeline
-   específico ("listo para entregar"):
-   ```bash
-   curl -H "Authorization: Bearer TU_TOKEN" \
-     https://tuempresa.kommo.com/api/v4/leads/pipelines
-   ```
-   pon ese `status_id` en `KOMMO_STATUS_ID`. Si lo dejas vacío, se
-   sincronizan todos los leads abiertos.
+4. (Opcional) Si quieres sincronizar solo los leads en un embudo/etapa
+   específico ("listo para entregar"), **no hace falta usar curl**: en el
+   panel de administrador hay dos selects — "Kommo: embudo y etapa" —
+   elige el embudo, luego la etapa, y dale "Guardar embudo/etapa". Eso
+   sincroniza correctamente porque Kommo requiere `pipeline_id` +
+   `status_id` juntos para filtrar una etapa específica (si solo mandas el
+   `status_id` puede no filtrar bien si hay etapas repetidas entre
+   pipelines). Si no eliges nada, se sincronizan todos los leads abiertos.
 
 Cada clic en "Sincronizar pedidos desde Kommo" en el panel trae los leads,
 geocodifica la dirección (si no tienes lat/lng directo) y los agrega como
