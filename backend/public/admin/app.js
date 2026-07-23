@@ -148,17 +148,21 @@ function renderStatusOptions(selectedStatusId) {
 
 function onPipelineChange() {
   renderStatusOptions();
+  saveKommoFilter(true);
 }
 
-async function saveKommoFilter() {
+async function saveKommoFilter(silent) {
   const pipeline_id = document.getElementById('pipelineSelect').value;
   const status_id = document.getElementById('statusSelect').value;
-  if (!pipeline_id || !status_id) return alert('Elige un embudo y una etapa');
+  if (!pipeline_id || !status_id) {
+    if (!silent) alert('Elige un embudo y una etapa');
+    return;
+  }
   await api('/api/admin/kommo/status-filter', {
     method: 'POST',
     body: JSON.stringify({ pipeline_id, status_id }),
   });
-  alert('Guardado. La proxima sincronizacion usara este embudo/etapa.');
+  if (!silent) alert('Guardado. La proxima sincronizacion usara este embudo/etapa.');
 }
 
 async function loadKommoFields() {
@@ -169,7 +173,7 @@ async function loadKommoFields() {
     const options = fields.map((f) => `<option value="${f.id}">${f.name} (${f.type})</option>`).join('');
 
     const addressSelect = document.getElementById('addressFieldSelect');
-    addressSelect.innerHTML = options;
+    addressSelect.innerHTML = '<option value="">(sin campo de direccion, solo se usa lat/lng)</option>' + options;
     if (current.address_field_id) addressSelect.value = current.address_field_id;
 
     const latlngSelect = document.getElementById('latlngFieldSelect');
@@ -180,15 +184,18 @@ async function loadKommoFields() {
   }
 }
 
-async function saveKommoFields() {
+async function saveKommoFields(silent) {
   const address_field_id = document.getElementById('addressFieldSelect').value;
   const latlng_field_id = document.getElementById('latlngFieldSelect').value;
-  if (!address_field_id && !latlng_field_id) return alert('Elige al menos un campo');
+  if (!address_field_id && !latlng_field_id) {
+    if (!silent) alert('Elige al menos un campo');
+    return;
+  }
   await api('/api/admin/kommo/field-config', {
     method: 'POST',
     body: JSON.stringify({ address_field_id, latlng_field_id }),
   });
-  alert('Guardado. La proxima sincronizacion usara estos campos.');
+  if (!silent) alert('Guardado. La proxima sincronizacion usara estos campos.');
 }
 
 async function syncKommo() {
