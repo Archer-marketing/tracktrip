@@ -34,6 +34,33 @@ function setSyncStatusFilter(pipelineId, statusId) {
   setSetting('kommo_status_id', String(statusId));
 }
 
+// Campos personalizados de leads, para el selector de "campo de direccion" / "campo lat-lng".
+async function getLeadCustomFields() {
+  const client = kommoClient();
+  let fields = [];
+  let page = 1;
+  while (true) {
+    const { data } = await client.get('/leads/custom_fields', { params: { limit: 250, page } });
+    const batch = data?._embedded?.custom_fields || [];
+    fields = fields.concat(batch);
+    if (batch.length < 250) break;
+    page++;
+  }
+  return fields.map((f) => ({ id: f.id, name: f.name, type: f.type }));
+}
+
+function getSyncFieldConfig() {
+  return {
+    address_field_id: getSetting('kommo_address_field_id') || process.env.KOMMO_ADDRESS_FIELD_ID || '',
+    latlng_field_id: getSetting('kommo_latlng_field_id') || process.env.KOMMO_LATLNG_FIELD_ID || '',
+  };
+}
+
+function setSyncFieldConfig(addressFieldId, latlngFieldId) {
+  setSetting('kommo_address_field_id', addressFieldId ? String(addressFieldId) : '');
+  setSetting('kommo_latlng_field_id', latlngFieldId ? String(latlngFieldId) : '');
+}
+
 function extractCustomField(lead, fieldId) {
   if (!fieldId) return null;
   const cf = (lead.custom_fields_values || []).find(
@@ -129,14 +156,15 @@ async function syncFromKommo() {
   );
 
   const results = { synced: 0, geocoded: 0, skipped: 0, errors: [] };
+  const { address_field_id, latlng_field_id } = getSyncFieldConfig();
 
   for (const lead of leads) {
     try {
-      const address = extractCustomField(lead, process.env.KOMMO_ADDRESS_FIELD_ID);
+      const address = extractCustomField(lead, address_field_id);
       let lat = null;
       let lng = null;
 
-      const latlngRaw = extractCustomField(lead, process.env.KOMMO_LATLNG_FIELD_ID);
+      const latlngRaw = extractCustomField(lead, latlng_field_id);
       const parsed = await parseLatLng(latlngRaw);
       if (parsed) {
         lat = parsed.lat;
@@ -153,7 +181,7 @@ async function syncFromKommo() {
       if (lat == null || lng == null) {
         results.skipped++;
         const reason = !latlngRaw && !address
-          ? 'no se encontro el campo de direccion ni de lat/lng en el lead (revisa KOMMO_ADDRESS_FIELD_ID / KOMMO_LATLNG_FIELD_ID)'
+          ? 'no se encontro el campo de direccion ni de lat/lng en este lead (revisa el selector "Kommo: campos" en el panel)'
           : `no se pudo geocodificar la direccion "${address}"`;
         results.errors.push(`Lead ${lead.id} (${lead.name}): ${reason}`);
         continue;
@@ -183,4 +211,12 @@ async function syncFromKommo() {
   return results;
 }
 
-module.exports = { syncFromKommo, getPipelines, getSyncStatusFilter, setSyncStatusFilter };
+module.exports = {
+  syncFromKommo,
+  getPipelines,
+  getSyncStatusFilter,
+  setSyncStatusFilter,
+  getLeadCustomFields,
+  getSyncFieldConfig,
+  setSyncFieldConfig,
+};

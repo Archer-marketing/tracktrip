@@ -163,21 +163,17 @@ pm2 startup
    larga duración** (long-lived token). Es tu `KOMMO_ACCESS_TOKEN`.
 2. Tu subdominio de Kommo (la parte antes de `.kommo.com`) es
    `KOMMO_SUBDOMAIN`.
-3. Necesitas el **ID del campo personalizado** donde guardas la dirección
-   de entrega:
-   ```bash
-   curl -H "Authorization: Bearer TU_TOKEN" \
-     https://tuempresa.kommo.com/api/v4/leads/custom_fields
-   ```
-   Busca el campo de dirección y copia su `"id"` a `KOMMO_ADDRESS_FIELD_ID`.
-4. (Opcional) Si quieres sincronizar solo los leads en un embudo/etapa
-   específico ("listo para entregar"), **no hace falta usar curl**: en el
-   panel de administrador hay dos selects — "Kommo: embudo y etapa" —
-   elige el embudo, luego la etapa, y dale "Guardar embudo/etapa". Eso
-   sincroniza correctamente porque Kommo requiere `pipeline_id` +
-   `status_id` juntos para filtrar una etapa específica (si solo mandas el
-   `status_id` puede no filtrar bien si hay etapas repetidas entre
-   pipelines). Si no eliges nada, se sincronizan todos los leads abiertos.
+3. Configura `KOMMO_ACCESS_TOKEN` y `KOMMO_SUBDOMAIN` en Easypanel y haz
+   deploy. Con eso ya puedes entrar al panel (`/admin`) y usar los
+   selectores en vez de sacar IDs a mano con curl:
+   - **"Kommo: embudo y etapa"** — elige en qué embudo/etapa están los
+     pedidos listos para entregar (opcional, si no eliges nada sincroniza
+     todos los leads abiertos).
+   - **"Kommo: campos"** — elige cuál de tus campos personalizados de
+     lead es la **dirección** de entrega, y opcionalmente cuál es el de
+     **lat/lng** (acepta texto `"lat,lng"`, un link completo de Google
+     Maps, o uno acortado tipo `maps.app.goo.gl/...`). Dale "Guardar
+     campos".
 
 Cada clic en "Sincronizar pedidos desde Kommo" en el panel trae los leads,
 geocodifica la dirección (si no tienes lat/lng directo) y los agrega como

@@ -5,6 +5,9 @@ const {
   getPipelines,
   getSyncStatusFilter,
   setSyncStatusFilter,
+  getLeadCustomFields,
+  getSyncFieldConfig,
+  setSyncFieldConfig,
 } = require('../services/kommoService');
 const { optimizeRoute } = require('../services/routingService');
 
@@ -67,6 +70,29 @@ router.post('/kommo/status-filter', (req, res) => {
   const { pipeline_id, status_id } = req.body;
   if (!pipeline_id || !status_id) return res.status(400).json({ error: 'Faltan datos' });
   setSyncStatusFilter(pipeline_id, status_id);
+  res.json({ ok: true });
+});
+
+// --- Kommo: campo de direccion / lat-lng para leer de cada lead ---
+router.get('/kommo/custom-fields', async (req, res) => {
+  try {
+    const fields = await getLeadCustomFields();
+    res.json(fields);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/kommo/field-config', (req, res) => {
+  res.json(getSyncFieldConfig());
+});
+
+router.post('/kommo/field-config', (req, res) => {
+  const { address_field_id, latlng_field_id } = req.body;
+  if (!address_field_id && !latlng_field_id) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
+  setSyncFieldConfig(address_field_id, latlng_field_id);
   res.json({ ok: true });
 });
 

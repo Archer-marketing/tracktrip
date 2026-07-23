@@ -38,6 +38,7 @@ async function init() {
   await loadDrivers();
   await loadStops();
   await loadKommoPipelines();
+  await loadKommoFields();
 
   const socket = io();
   socket.on('admin:driverUpdate', ({ driver_id, lat, lng }) => {
@@ -158,6 +159,36 @@ async function saveKommoFilter() {
     body: JSON.stringify({ pipeline_id, status_id }),
   });
   alert('Guardado. La proxima sincronizacion usara este embudo/etapa.');
+}
+
+async function loadKommoFields() {
+  try {
+    const fields = await api('/api/admin/kommo/custom-fields');
+    const current = await api('/api/admin/kommo/field-config');
+
+    const options = fields.map((f) => `<option value="${f.id}">${f.name} (${f.type})</option>`).join('');
+
+    const addressSelect = document.getElementById('addressFieldSelect');
+    addressSelect.innerHTML = options;
+    if (current.address_field_id) addressSelect.value = current.address_field_id;
+
+    const latlngSelect = document.getElementById('latlngFieldSelect');
+    latlngSelect.innerHTML = '<option value="">(sin campo lat/lng, solo geocodificar direccion)</option>' + options;
+    if (current.latlng_field_id) latlngSelect.value = current.latlng_field_id;
+  } catch (e) {
+    console.error('No se pudieron cargar los campos de Kommo', e);
+  }
+}
+
+async function saveKommoFields() {
+  const address_field_id = document.getElementById('addressFieldSelect').value;
+  const latlng_field_id = document.getElementById('latlngFieldSelect').value;
+  if (!address_field_id && !latlng_field_id) return alert('Elige al menos un campo');
+  await api('/api/admin/kommo/field-config', {
+    method: 'POST',
+    body: JSON.stringify({ address_field_id, latlng_field_id }),
+  });
+  alert('Guardado. La proxima sincronizacion usara estos campos.');
 }
 
 async function syncKommo() {
