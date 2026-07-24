@@ -183,13 +183,15 @@ async function syncFromKommo() {
         }
       }
 
+      // Aunque no tengamos ubicacion, guardamos el lead igual (lat/lng en null)
+      // para que aparezca marcado como "sin ubicacion" en el panel, en vez de
+      // desaparecer silenciosamente hasta la proxima sincronizacion.
       if (lat == null || lng == null) {
         results.skipped++;
         const reason = !raw
           ? 'no se encontro el campo de direccion/Maps en este lead (revisa el selector "Kommo: campo" en el panel)'
           : `no se pudo geocodificar "${raw}"`;
         results.errors.push(`Lead ${lead.id} (${lead.name}): ${reason}`);
-        continue;
       }
 
       const phone = lead._embedded?.contacts?.[0]?.id ? '' : '';

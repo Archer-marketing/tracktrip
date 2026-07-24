@@ -83,6 +83,13 @@ function updateDriverMarker(driverId, lat, lng, name) {
   }
 }
 
+// Color estable por cliente (angulo dorado -> tonos bien distribuidos),
+// asi el mismo color identifica a un cliente tanto en la lista como en el mapa.
+function colorForCustomer(customerId) {
+  const hue = (Number(customerId) * 137.508) % 360;
+  return `hsl(${hue}, 70%, 45%)`;
+}
+
 async function loadStops() {
   const stops = await api('/api/admin/stops');
   const container = document.getElementById('stops');
@@ -94,18 +101,32 @@ async function loadStops() {
   stops
     .filter((s) => s.status === 'pending')
     .forEach((s) => {
+      const color = colorForCustomer(s.customer_id);
+      const hasLocation = s.lat != null && s.lng != null;
+
       const div = document.createElement('div');
-      div.className = 'stop';
+      div.className = 'stop' + (hasLocation ? '' : ' stop-missing');
       div.innerHTML = `
         <label>
-          <input type="checkbox" data-id="${s.id}" onchange="toggleStop(${s.id}, this.checked)" />
-          <span>${s.name}<br><small>${s.address || ''}</small></span>
+          <input type="checkbox" data-id="${s.id}" onchange="toggleStop(${s.id}, this.checked)" ${hasLocation ? '' : 'disabled'} />
+          <span class="stop-color" style="background:${color}"></span>
+          <span>
+            ${s.name}<br>
+            <small>${s.address || ''}</small><br>
+            ${hasLocation ? '' : '<small class="stop-warn">⚠️ Sin ubicación — corrige el lead en Kommo y vuelve a sincronizar</small><br>'}
+            ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
+          </span>
         </label>
       `;
       container.appendChild(div);
 
-      if (s.lat && s.lng) {
-        const marker = L.marker([s.lat, s.lng]).addTo(map).bindPopup(s.name);
+      if (hasLocation) {
+        const icon = L.divIcon({
+          html: `<div style="width:16px;height:16px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 0 3px rgba(0,0,0,.6)"></div>`,
+          iconSize: [16, 16],
+          className: '',
+        });
+        const marker = L.marker([s.lat, s.lng], { icon }).addTo(map).bindPopup(s.name);
         stopMarkers.push(marker);
       }
     });

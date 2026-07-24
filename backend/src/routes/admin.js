@@ -99,13 +99,21 @@ router.get('/stops', (req, res) => {
   const stops = db
     .prepare(
       `SELECT s.id, s.status, s.sequence, s.driver_id,
-              c.id as customer_id, c.name, c.address, c.lat, c.lng
+              c.id as customer_id, c.name, c.address, c.lat, c.lng, c.kommo_lead_id
        FROM stops s JOIN customers c ON c.id = s.customer_id
        WHERE s.status != 'delivered'
        ORDER BY s.driver_id, s.sequence`
     )
     .all();
-  res.json(stops);
+  const subdomain = process.env.KOMMO_SUBDOMAIN;
+  const withKommoUrl = stops.map((s) => ({
+    ...s,
+    kommo_url:
+      subdomain && s.kommo_lead_id
+        ? `https://${subdomain}.kommo.com/leads/detail/${s.kommo_lead_id}`
+        : null,
+  }));
+  res.json(withKommoUrl);
 });
 
 // --- Asignar y optimizar ruta para un repartidor ---
@@ -121,13 +129,18 @@ router.post('/assign-route', async (req, res) => {
   }
 
   const placeholders = stop_ids.map(() => '?').join(',');
-  const stops = db
+  const allStops = db
     .prepare(
       `SELECT s.id as stop_id, c.id, c.name, c.lat, c.lng
        FROM stops s JOIN customers c ON c.id = s.customer_id
        WHERE s.id IN (${placeholders})`
     )
     .all(...stop_ids);
+
+  const stops = allStops.filter((s) => s.lat != null && s.lng != null);
+  if (!stops.length) {
+    return res.status(400).json({ error: 'Ninguno de los pedidos seleccionados tiene ubicacion' });
+  }
 
   const ordered = await optimizeRoute(loc, stops);
 
