@@ -77,16 +77,18 @@ de conectar un repo, puedes pegar el contenido de `docker-compose.yml` ahí
 directamente (Easypanel se encarga de exponer el dominio/HTTPS igual).
 
 ## 5. Crear repartidores
-Usa la pestaña **"Terminal"** de Easypanel (te da una consola dentro del
-contenedor) o simplemente corre esto desde tu computadora, apuntando a tu
-dominio ya público:
+Entra a `/admin`, en la sección **"Repartidores"** pon el nombre y un
+código de acceso (lo que el repartidor va a usar para entrar a
+`/driver`, ej. `juan123`) y dale "➕ Agregar repartidor". Repite por
+cada repartidor (máximo recomendado: 4, aunque soporta más).
+
+Alternativa por curl, si lo prefieres:
 ```bash
 curl -X POST https://reparto.tuempresa.com/api/admin/drivers \
   -H "Content-Type: application/json" \
   -H "x-admin-password: TU_ADMIN_PASSWORD" \
   -d '{"name":"Juan", "login_code":"juan123"}'
 ```
-Repite por cada repartidor (máximo recomendado: 4, aunque soporta más).
 
 ## 6. Motor de rutas real (OSRM) — opcional
 Por defecto el sistema calcula rutas con distancia en línea recta (rápido,

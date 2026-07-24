@@ -36,10 +36,17 @@ router.get('/drivers', (req, res) => {
 router.post('/drivers', (req, res) => {
   const { name, login_code } = req.body;
   if (!name || !login_code) return res.status(400).json({ error: 'Faltan datos' });
-  const info = db
-    .prepare('INSERT INTO drivers (name, login_code) VALUES (?, ?)')
-    .run(name, login_code);
-  res.json({ id: info.lastInsertRowid });
+  try {
+    const info = db
+      .prepare('INSERT INTO drivers (name, login_code) VALUES (?, ?)')
+      .run(name, login_code);
+    res.json({ id: info.lastInsertRowid });
+  } catch (err) {
+    if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(400).json({ error: 'Ese código de acceso ya está en uso, elige otro' });
+    }
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Kommo sync ---

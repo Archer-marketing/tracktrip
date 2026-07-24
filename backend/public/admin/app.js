@@ -69,7 +69,7 @@ async function loadDrivers() {
   drivers.forEach((d) => {
     const div = document.createElement('div');
     div.className = 'stop';
-    div.innerHTML = `<b>${d.name}</b> <span class="driver-tag">${d.lat ? 'en línea' : 'sin ubicación'}</span>`;
+    div.innerHTML = `<b>${d.name}</b> <span class="driver-tag">${d.lat ? 'en línea' : 'sin ubicación'}</span><br><small>código: ${d.login_code}</small>`;
     list.appendChild(div);
 
     const opt = document.createElement('option');
@@ -79,6 +79,24 @@ async function loadDrivers() {
 
     if (d.lat && d.lng) updateDriverMarker(d.id, d.lat, d.lng, d.name);
   });
+}
+
+async function addDriver() {
+  const nameInput = document.getElementById('newDriverName');
+  const codeInput = document.getElementById('newDriverCode');
+  const name = nameInput.value.trim();
+  const login_code = codeInput.value.trim();
+  if (!name || !login_code) return alert('Pon nombre y código de acceso');
+
+  const result = await api('/api/admin/drivers', {
+    method: 'POST',
+    body: JSON.stringify({ name, login_code }),
+  });
+  if (result.error) return alert(result.error);
+
+  nameInput.value = '';
+  codeInput.value = '';
+  await loadDrivers();
 }
 
 function updateDriverMarker(driverId, lat, lng, name) {
