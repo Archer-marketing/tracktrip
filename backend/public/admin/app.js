@@ -72,17 +72,33 @@ async function loadDrivers() {
 
   drivers.forEach((d) => {
     const div = document.createElement('div');
-    div.className = 'stop';
-    div.innerHTML = `<b>${d.name}</b> <span class="driver-tag">${d.lat ? 'en línea' : 'sin ubicación'}</span><br><small>código: ${d.login_code}</small>`;
+    div.className = 'stop' + (d.active ? '' : ' stop-missing');
+    div.innerHTML = `
+      <b>${d.name}</b> <span class="driver-tag">${d.lat ? 'en línea' : 'sin ubicación'}</span><br>
+      <small>código: ${d.login_code}</small><br>
+      <button class="mini-btn" style="width:auto" onclick="toggleDriverActive(${d.id}, ${d.active ? 0 : 1})">
+        ${d.active ? '🚫 Desactivar' : '✅ Activar'}
+      </button>
+    `;
     list.appendChild(div);
 
-    const opt = document.createElement('option');
-    opt.value = d.id;
-    opt.textContent = d.name;
-    select.appendChild(opt);
+    if (d.active) {
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.name;
+      select.appendChild(opt);
+    }
 
     if (d.lat && d.lng) updateDriverMarker(d.id, d.lat, d.lng, d.name);
   });
+}
+
+async function toggleDriverActive(id, active) {
+  await api(`/api/admin/drivers/${id}/active`, {
+    method: 'POST',
+    body: JSON.stringify({ active }),
+  });
+  await loadDrivers();
 }
 
 async function addDriver() {
@@ -407,7 +423,7 @@ async function syncKommo() {
   btn.textContent = 'Sincronizando...';
   try {
     const result = await api('/api/admin/sync-kommo', { method: 'POST' });
-    let msg = `Sincronizados: ${result.synced}, geocodificados: ${result.geocoded}, con error: ${result.skipped}`;
+    let msg = `Sincronizados: ${result.synced}, geocodificados: ${result.geocoded}, con error: ${result.skipped}, quitados: ${result.removed || 0}`;
     if (result.errors && result.errors.length) {
       msg += `\n\nPrimeros errores:\n${result.errors.slice(0, 5).join('\n')}`;
     }

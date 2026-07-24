@@ -82,6 +82,11 @@ código de acceso (lo que el repartidor va a usar para entrar a
 `/driver`, ej. `juan123`) y dale "➕ Agregar repartidor". Repite por
 cada repartidor (máximo recomendado: 4, aunque soporta más).
 
+Cada repartidor tiene un botón **"🚫 Desactivar" / "✅ Activar"**: si lo
+desactivas, su código deja de funcionar en `/driver` al instante (sin
+borrar su historial de entregas), y tampoco aparece como opción al
+asignar rutas.
+
 Alternativa por curl, si lo prefieres:
 ```bash
 curl -X POST https://reparto.tuempresa.com/api/admin/drivers \
@@ -181,7 +186,11 @@ pm2 startup
 
 Cada clic en "Sincronizar pedidos desde Kommo" en el panel trae los leads,
 geocodifica la dirección (si no tienes lat/lng directo) y los agrega como
-pedidos pendientes.
+pedidos pendientes. Si cambias el embudo/etapa (o un lead ya no aparece
+en Kommo con ese filtro), los pendientes que ya no correspondan se
+quitan solos en el siguiente sync — no se acumulan. Esto solo aplica a
+pendientes sin asignar; un pedido ya asignado a un repartidor o ya
+entregado nunca se toca.
 
 ---
 

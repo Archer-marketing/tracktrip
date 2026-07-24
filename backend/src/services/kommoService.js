@@ -161,8 +161,9 @@ async function syncFromKommo() {
     `INSERT INTO stops (customer_id, status) VALUES (?, 'pending')`
   );
 
-  const results = { synced: 0, geocoded: 0, skipped: 0, errors: [] };
+  const results = { synced: 0, geocoded: 0, skipped: 0, removed: 0, errors: [] };
   const { field_id } = getSyncFieldConfig();
+  const syncedLeadIds = new Set();
 
   for (const lead of leads) {
     try {
@@ -209,10 +210,30 @@ async function syncFromKommo() {
       if (customer && !hasPendingStop.get(customer.id)) {
         insertStop.run(customer.id);
       }
+      syncedLeadIds.add(String(lead.id));
       results.synced++;
     } catch (err) {
       results.errors.push(`Lead ${lead.id}: ${err.message}`);
     }
+  }
+
+  // Quita de "pendientes" los leads que ya no aparecen en este sync (ej.
+  // cambiaste de embudo/etapa, o el lead se movio/cerro en Kommo). Solo
+  // toca 'pending' (nada asignado ni entregado) para no perder trabajo
+  // que ya esta en curso.
+  const pendingWithLead = db
+    .prepare(
+      `SELECT s.id, c.kommo_lead_id
+       FROM stops s JOIN customers c ON c.id = s.customer_id
+       WHERE s.status = 'pending'`
+    )
+    .all();
+  const stale = pendingWithLead.filter((s) => !syncedLeadIds.has(String(s.kommo_lead_id)));
+  if (stale.length) {
+    const deleteStop = db.prepare('DELETE FROM stops WHERE id = ?');
+    const tx = db.transaction((rows) => rows.forEach((r) => deleteStop.run(r.id)));
+    tx(stale);
+    results.removed = stale.length;
   }
 
   return results;

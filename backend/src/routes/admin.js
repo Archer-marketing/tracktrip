@@ -49,6 +49,16 @@ router.post('/drivers', (req, res) => {
   }
 });
 
+// Activa/desactiva el codigo de acceso de un repartidor. El login en
+// /driver ya filtra por active=1, asi que desactivarlo aqui bloquea la
+// entrada al instante sin borrar su historial de pedidos/entregas.
+router.post('/drivers/:id/active', (req, res) => {
+  const { id } = req.params;
+  const { active } = req.body;
+  db.prepare('UPDATE drivers SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
+  res.json({ ok: true });
+});
+
 // --- Kommo sync ---
 router.post('/sync-kommo', async (req, res) => {
   try {
