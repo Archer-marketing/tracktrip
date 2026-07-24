@@ -25,6 +25,7 @@
   .brand { font-size: 22px; font-weight: 800; letter-spacing: 0.5px; }
   .brand .leaf { color: var(--green-dark); }
   .tagline { font-size: 11px; color: #6b7566; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+  .logo-img { display: none; max-height: 56px; max-width: 220px; margin: 0 auto; }
 
   .content { flex: 1; display: flex; flex-direction: column; padding: 16px; gap: 16px; }
 
@@ -50,7 +51,15 @@
 </head>
 <body>
   <div class="header">
-    <div class="brand"><span class="leaf">🌿</span> UCHBEN</div>
+    <img
+      id="logoImg"
+      class="logo-img"
+      src="logo.png"
+      alt="Uchben"
+      onload="this.style.display='block'; document.getElementById('brandFallback').style.display='none';"
+      onerror="this.style.display='none';"
+    />
+    <div class="brand" id="brandFallback"><span class="leaf">🌿</span> UCHBEN</div>
     <div class="tagline">Donde lo fresco nunca se pierde</div>
   </div>
 
