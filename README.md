@@ -169,11 +169,13 @@ pm2 startup
    - **"Kommo: embudo y etapa"** — elige en qué embudo/etapa están los
      pedidos listos para entregar (opcional, si no eliges nada sincroniza
      todos los leads abiertos).
-   - **"Kommo: campos"** — elige cuál de tus campos personalizados de
-     lead es la **dirección** de entrega, y opcionalmente cuál es el de
-     **lat/lng** (acepta texto `"lat,lng"`, un link completo de Google
-     Maps, o uno acortado tipo `maps.app.goo.gl/...`). Dale "Guardar
-     campos".
+   - **"Kommo: campo (dirección o liga de Maps)"** — elige cuál de tus
+     campos personalizados de lead trae la ubicación de entrega. Sirve el
+     mismo campo sea lo que sea que tengas ahí: dirección en texto, un
+     link completo de Google Maps, uno acortado (`maps.app.goo.gl/...`),
+     o `"lat,lng"` plano — el sistema detecta automáticamente cuál es y
+     saca las coordenadas (o geocodifica si es texto de dirección). Se
+     guarda solo al elegirlo, no hace falta darle a ningún botón.
 
 Cada clic en "Sincronizar pedidos desde Kommo" en el panel trae los leads,
 geocodifica la dirección (si no tienes lat/lng directo) y los agrega como

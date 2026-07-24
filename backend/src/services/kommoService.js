@@ -49,16 +49,22 @@ async function getLeadCustomFields() {
   return fields.map((f) => ({ id: f.id, name: f.name, type: f.type }));
 }
 
+// Un solo campo: puede tener texto de direccion o una liga de Maps
+// (completa, acortada, o "lat,lng" plano). syncFromKommo detecta cual es.
 function getSyncFieldConfig() {
   return {
-    address_field_id: getSetting('kommo_address_field_id') || process.env.KOMMO_ADDRESS_FIELD_ID || '',
-    latlng_field_id: getSetting('kommo_latlng_field_id') || process.env.KOMMO_LATLNG_FIELD_ID || '',
+    field_id:
+      getSetting('kommo_field_id') ||
+      getSetting('kommo_latlng_field_id') ||
+      getSetting('kommo_address_field_id') ||
+      process.env.KOMMO_LATLNG_FIELD_ID ||
+      process.env.KOMMO_ADDRESS_FIELD_ID ||
+      '',
   };
 }
 
-function setSyncFieldConfig(addressFieldId, latlngFieldId) {
-  setSetting('kommo_address_field_id', addressFieldId ? String(addressFieldId) : '');
-  setSetting('kommo_latlng_field_id', latlngFieldId ? String(latlngFieldId) : '');
+function setSyncFieldConfig(fieldId) {
+  setSetting('kommo_field_id', fieldId ? String(fieldId) : '');
 }
 
 function extractCustomField(lead, fieldId) {
@@ -156,21 +162,20 @@ async function syncFromKommo() {
   );
 
   const results = { synced: 0, geocoded: 0, skipped: 0, errors: [] };
-  const { address_field_id, latlng_field_id } = getSyncFieldConfig();
+  const { field_id } = getSyncFieldConfig();
 
   for (const lead of leads) {
     try {
-      const address = extractCustomField(lead, address_field_id);
+      const raw = extractCustomField(lead, field_id);
       let lat = null;
       let lng = null;
 
-      const latlngRaw = extractCustomField(lead, latlng_field_id);
-      const parsed = await parseLatLng(latlngRaw);
+      const parsed = await parseLatLng(raw);
       if (parsed) {
         lat = parsed.lat;
         lng = parsed.lng;
-      } else if (address) {
-        const geo = await geocodeAddress(address);
+      } else if (raw) {
+        const geo = await geocodeAddress(raw);
         if (geo) {
           lat = geo.lat;
           lng = geo.lng;
@@ -180,9 +185,9 @@ async function syncFromKommo() {
 
       if (lat == null || lng == null) {
         results.skipped++;
-        const reason = !latlngRaw && !address
-          ? 'no se encontro el campo de direccion ni de lat/lng en este lead (revisa el selector "Kommo: campos" en el panel)'
-          : `no se pudo geocodificar la direccion "${address}"`;
+        const reason = !raw
+          ? 'no se encontro el campo de direccion/Maps en este lead (revisa el selector "Kommo: campo" en el panel)'
+          : `no se pudo geocodificar "${raw}"`;
         results.errors.push(`Lead ${lead.id} (${lead.name}): ${reason}`);
         continue;
       }
@@ -192,7 +197,7 @@ async function syncFromKommo() {
       insertCustomer.run({
         kommo_lead_id: String(lead.id),
         name: lead.name || `Pedido ${lead.id}`,
-        address: address || '',
+        address: raw || '',
         lat,
         lng,
         phone,

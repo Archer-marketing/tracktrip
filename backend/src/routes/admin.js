@@ -73,7 +73,7 @@ router.post('/kommo/status-filter', (req, res) => {
   res.json({ ok: true });
 });
 
-// --- Kommo: campo de direccion / lat-lng para leer de cada lead ---
+// --- Kommo: campo de direccion o liga de Maps a leer de cada lead ---
 router.get('/kommo/custom-fields', async (req, res) => {
   try {
     const fields = await getLeadCustomFields();
@@ -88,11 +88,9 @@ router.get('/kommo/field-config', (req, res) => {
 });
 
 router.post('/kommo/field-config', (req, res) => {
-  const { address_field_id, latlng_field_id } = req.body;
-  if (!address_field_id && !latlng_field_id) {
-    return res.status(400).json({ error: 'Faltan datos' });
-  }
-  setSyncFieldConfig(address_field_id, latlng_field_id);
+  const { field_id } = req.body;
+  if (!field_id) return res.status(400).json({ error: 'Faltan datos' });
+  setSyncFieldConfig(field_id);
   res.json({ ok: true });
 });
 
