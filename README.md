@@ -63,6 +63,7 @@ KOMMO_STATUS_ID=
 NOMINATIM_URL=https://nominatim.openstreetmap.org
 NOMINATIM_USER_AGENT=mi-delivery-tracker (contacto@tuempresa.com)
 OSRM_URL=http://localhost:5000
+KOMMO_TRACKING_FIELD_ID=2445646
 ```
 (`PORT` y `SQLITE_PATH` ya vienen fijos en el `Dockerfile`/`docker-compose.yml`,
 no hace falta tocarlos). Ver la sección **"Configurar Kommo"** más abajo para
@@ -220,6 +221,16 @@ entregado nunca se toca.
    (por ejemplo si un cliente no está y prefiere ver qué más le falta),
    puede tocar "🗺️ Ver ruta completa" — mapa y lista con todas sus
    paradas del día, marcando cuáles ya entregó.
+6. Al confirmar la ruta (paso 4), cada pedido recién asignado recibe una
+   **liga pública de rastreo** (`https://tudominio.com/track/<token>`),
+   única por pedido y válida 24 horas. Ahí el cliente ve el mapa con su
+   repartidor en tiempo real y cuántos pedidos le faltan para llegar al
+   suyo — sin contraseña, pensada para compartirse directo con él. Esa
+   misma liga se escribe automáticamente en el campo personalizado
+   `KOMMO_TRACKING_FIELD_ID` del lead en Kommo (respetando el límite de
+   7 solicitudes/segundo de Kommo). Por ahora solo se escribe el campo —
+   no se manda nada al cliente automáticamente (WhatsApp/SMS), eso queda
+   para una automatización futura.
 
 ## Limitación importante sobre "segundo plano"
 Ningún navegador (Chrome, Safari) garantiza mandar ubicación si el

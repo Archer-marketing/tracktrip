@@ -10,6 +10,35 @@ function kommoClient() {
   });
 }
 
+// Kommo limita a 7 solicitudes/segundo por cuenta. Esta cola serializa las
+// llamadas dejando ~170ms entre cada una (~6/seg, con margen), asi nunca se
+// manda mas de una a la vez ni se pasa del limite aunque se disparen muchas
+// juntas (ej. al asignar una ruta con varios pedidos).
+let kommoQueueTail = Promise.resolve();
+function throttledKommoCall(fn) {
+  const run = kommoQueueTail.then(async () => {
+    try {
+      return await fn();
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, 170));
+    }
+  });
+  kommoQueueTail = run.catch(() => {});
+  return run;
+}
+
+// Campo personalizado de lead donde se escribe la liga publica de rastreo.
+const TRACKING_FIELD_ID = process.env.KOMMO_TRACKING_FIELD_ID || '2445646';
+
+async function updateLeadTrackingField(leadId, url) {
+  const client = kommoClient();
+  return throttledKommoCall(() =>
+    client.patch(`/leads/${leadId}`, {
+      custom_fields_values: [{ field_id: Number(TRACKING_FIELD_ID), values: [{ value: url }] }],
+    })
+  );
+}
+
 // Embudos (pipelines) y etapas (statuses) de la cuenta, para el selector del panel.
 async function getPipelines() {
   const client = kommoClient();
@@ -247,4 +276,5 @@ module.exports = {
   getLeadCustomFields,
   getSyncFieldConfig,
   setSyncFieldConfig,
+  updateLeadTrackingField,
 };

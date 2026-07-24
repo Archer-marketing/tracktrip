@@ -8,19 +8,31 @@ const db = require('./db');
 
 const adminRoutes = require('./routes/admin');
 const driverRoutes = require('./routes/driver');
+const trackRoutes = require('./routes/track');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
+
+// Detras del proxy de Easypanel: sin esto, req.protocol siempre da "http"
+// aunque el cliente entre por https (afecta la liga publica de rastreo).
+app.set('trust proxy', 1);
 
 app.use(cors());
 app.use(express.json());
 
 app.use('/api/admin', adminRoutes);
 app.use('/api/driver', driverRoutes);
+app.use('/api/track', trackRoutes);
 
 app.use('/admin', express.static(path.join(__dirname, '..', 'public', 'admin')));
 app.use('/driver', express.static(path.join(__dirname, '..', 'public', 'driver')));
+app.use('/track', express.static(path.join(__dirname, '..', 'public', 'track')));
+// Liga publica con token en la URL (/track/<token>): sirve el mismo index.html
+// para que el frontend lea el token del path, ya que no es un archivo real.
+app.get('/track/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'track', 'index.html'));
+});
 app.get('/', (req, res) => res.redirect('/admin'));
 
 // --- Socket.IO: ubicacion en tiempo real ---

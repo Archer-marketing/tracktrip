@@ -57,4 +57,17 @@ CREATE TABLE IF NOT EXISTS stops (
 );
 `);
 
+// Liga publica de rastreo por cliente (se genera al asignar una ruta).
+// ALTER TABLE ... ADD COLUMN no tiene "IF NOT EXISTS" en SQLite, asi que
+// se intenta y se ignora el error si la columna ya existe.
+try {
+  db.exec(`ALTER TABLE customers ADD COLUMN tracking_token TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE customers ADD COLUMN tracking_token_expires_at TEXT`);
+} catch (e) {}
+db.exec(
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_tracking_token ON customers(tracking_token)`
+);
+
 module.exports = db;

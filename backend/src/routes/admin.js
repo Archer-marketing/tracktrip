@@ -10,6 +10,7 @@ const {
   setSyncFieldConfig,
 } = require('../services/kommoService');
 const { optimizeRoute } = require('../services/routingService');
+const { createTrackingLinksForStops } = require('../services/trackingService');
 
 const router = express.Router();
 
@@ -208,6 +209,14 @@ router.post('/assign-route', (req, res) => {
     ids.forEach((id, idx) => update.run(driver_id, idx + 1, id));
   });
   tx(ordered_stop_ids);
+
+  // Genera/renueva la liga publica de rastreo (24h) de cada pedido recien
+  // asignado y la manda al campo de Kommo configurado. No se espera aqui
+  // (fire-and-forget) para no atrasar la respuesta al panel.
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  createTrackingLinksForStops(baseUrl, ordered_stop_ids).catch((err) => {
+    console.error('Error generando ligas de rastreo:', err.message);
+  });
 
   res.json({ ok: true });
 });
