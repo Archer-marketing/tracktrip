@@ -2,6 +2,7 @@ let driverId = localStorage.getItem('driverId');
 let driverName = localStorage.getItem('driverName');
 let socket;
 let watchId;
+let pollIntervalId;
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/driver/sw.js').catch(() => {});
@@ -45,10 +46,38 @@ async function login() {
 function startApp() {
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
+  document.getElementById('driverBadge').style.display = 'block';
+  document.getElementById('driverNameLabel').textContent = driverName || '';
   requestWakeLock();
   startTracking();
   pollNextStop();
-  setInterval(pollNextStop, 15000);
+  if (pollIntervalId) clearInterval(pollIntervalId);
+  pollIntervalId = setInterval(pollNextStop, 15000);
+}
+
+// Cierra la sesion de este repartidor en este dispositivo/navegador, para
+// poder entrar con otro codigo sin que se quede pegado el anterior.
+function logout() {
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+  if (pollIntervalId) {
+    clearInterval(pollIntervalId);
+    pollIntervalId = null;
+  }
+  localStorage.removeItem('driverId');
+  localStorage.removeItem('driverName');
+  driverId = null;
+  driverName = null;
+
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('driverBadge').style.display = 'none';
+  document.getElementById('login').style.display = 'flex';
+  document.getElementById('code').value = '';
+  setStatus(false);
 }
 
 function startTracking() {

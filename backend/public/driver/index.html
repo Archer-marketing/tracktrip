@@ -14,6 +14,8 @@
     display: flex; flex-direction: column;
   }
   .header { padding: 16px; background: #1e293b; text-align: center; font-weight: 700; font-size: 18px; }
+  .driver-badge { font-size: 13px; font-weight: 400; margin-top: 4px; color: #cbd5e1; }
+  .driver-badge a { color: #93c5fd; }
   .status { padding: 8px 16px; text-align: center; font-size: 13px; }
   .status.on { color: #4ade80; }
   .status.off { color: #f87171; }
@@ -35,7 +37,12 @@
 </style>
 </head>
 <body>
-  <div class="header">🚚 Repartidor</div>
+  <div class="header">
+    🚚 Repartidor
+    <div id="driverBadge" class="driver-badge" style="display:none;">
+      <span id="driverNameLabel"></span> · <a href="#" onclick="logout(); return false;">Cambiar de repartidor</a>
+    </div>
+  </div>
   <div id="statusBar" class="status off">Ubicación: inactiva</div>
 
   <div id="login">
