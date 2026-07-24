@@ -44,6 +44,29 @@ router.get('/next-stop/:driverId', (req, res) => {
   res.json({ stop: { ...stop, mapsUrl }, remaining });
 });
 
+// Ruta completa del repartidor (pendientes + entregados hoy, en orden),
+// para que vea el panorama completo y no solo la siguiente parada -
+// util si un cliente no esta y prefiere saltarlo y volver despues.
+router.get('/route/:driverId', (req, res) => {
+  const { driverId } = req.params;
+  const stops = db
+    .prepare(
+      `SELECT s.id, s.status, s.sequence, c.name, c.address, c.lat, c.lng
+       FROM stops s JOIN customers c ON c.id = s.customer_id
+       WHERE s.driver_id = ?
+         AND (s.status = 'assigned' OR (s.status = 'delivered' AND date(s.delivered_at) = date('now')))
+       ORDER BY s.sequence ASC`
+    )
+    .all(driverId);
+
+  const withMaps = stops.map((s) => ({
+    ...s,
+    mapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}&travelmode=driving`,
+  }));
+
+  res.json({ stops: withMaps });
+});
+
 router.post('/complete-stop', (req, res) => {
   const { stop_id } = req.body;
   db.prepare(`UPDATE stops SET status = 'delivered', delivered_at = datetime('now') WHERE id = ?`).run(

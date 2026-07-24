@@ -207,7 +207,10 @@ pedidos pendientes.
    entregados el día de hoy aparecen marcados con ✅.
 5. Al repartidor le aparece automáticamente "tu siguiente parada" con
    botón directo a Google Maps. Cuando entrega, toca "Marcar como
-   entregado" y le aparece la siguiente.
+   entregado" y le aparece la siguiente. Si quiere ver todo su recorrido
+   (por ejemplo si un cliente no está y prefiere ver qué más le falta),
+   puede tocar "🗺️ Ver ruta completa" — mapa y lista con todas sus
+   paradas del día, marcando cuáles ya entregó.
 
 ## Limitación importante sobre "segundo plano"
 Ningún navegador (Chrome, Safari) garantiza mandar ubicación si el

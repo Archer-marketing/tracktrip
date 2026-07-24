@@ -3,6 +3,8 @@ let driverName = localStorage.getItem('driverName');
 let socket;
 let watchId;
 let pollIntervalId;
+let routeMap, routeMarkers = [];
+let routeVisible = false;
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/driver/sw.js').catch(() => {});
@@ -78,6 +80,10 @@ function logout() {
   document.getElementById('login').style.display = 'flex';
   document.getElementById('code').value = '';
   setStatus(false);
+
+  routeVisible = false;
+  document.getElementById('routeSection').style.display = 'none';
+  document.getElementById('toggleRouteBtn').textContent = '🗺️ Ver ruta completa';
 }
 
 function startTracking() {
@@ -112,6 +118,7 @@ async function pollNextStop() {
     const res = await fetch(`/api/driver/next-stop/${driverId}`);
     const data = await res.json();
     renderStop(data.stop, data.remaining);
+    if (routeVisible) loadRouteView();
   } catch (e) { /* red caida, se reintenta en el siguiente poll */ }
 }
 
@@ -141,6 +148,88 @@ async function completeStop(stopId) {
     body: JSON.stringify({ stop_id: stopId }),
   });
   pollNextStop();
+}
+
+// Vista de "ruta completa": util cuando un cliente no esta y el repartidor
+// quiere ver que mas le falta / saltarse uno mentalmente antes de volver.
+async function toggleRoute() {
+  routeVisible = !routeVisible;
+  document.getElementById('routeSection').style.display = routeVisible ? 'block' : 'none';
+  document.getElementById('toggleRouteBtn').textContent = routeVisible
+    ? '🔽 Ocultar ruta completa'
+    : '🗺️ Ver ruta completa';
+
+  if (routeVisible) {
+    await loadRouteView();
+    // Leaflet necesita medir el contenedor ya visible para dibujar bien.
+    setTimeout(() => routeMap && routeMap.invalidateSize(), 100);
+  }
+}
+
+async function loadRouteView() {
+  try {
+    const res = await fetch(`/api/driver/route/${driverId}`);
+    const data = await res.json();
+    renderRouteList(data.stops);
+    renderRouteMap(data.stops);
+  } catch (e) { /* red caida, se reintenta en el siguiente poll */ }
+}
+
+function renderRouteList(stops) {
+  const list = document.getElementById('routeList');
+  if (!stops.length) {
+    list.innerHTML = '<div class="empty">No tienes pedidos asignados por ahora 🎉</div>';
+    return;
+  }
+  list.innerHTML = stops
+    .map((s) => {
+      const done = s.status === 'delivered';
+      return `
+        <div class="route-item ${done ? 'done' : ''}">
+          <span class="route-seq">${done ? '✅' : s.sequence}</span>
+          <span class="route-info">
+            <b>${s.name}</b><br>
+            <small>${s.address || ''}</small>
+          </span>
+          <a class="route-link" href="${s.mapsUrl}" target="_blank">📍</a>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderRouteMap(stops) {
+  if (!routeMap) {
+    routeMap = L.map('routeMap');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+    }).addTo(routeMap);
+  }
+
+  routeMarkers.forEach((m) => routeMap.removeLayer(m));
+  routeMarkers = [];
+
+  const bounds = [];
+  stops.forEach((s) => {
+    const done = s.status === 'delivered';
+    const color = done ? '#16a34a' : '#2563eb';
+    const label = done ? '✅' : s.sequence;
+    const icon = L.divIcon({
+      html: `<div style="width:26px;height:26px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 0 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;">${label}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      className: '',
+    });
+    const marker = L.marker([s.lat, s.lng], { icon }).addTo(routeMap).bindPopup(s.name);
+    routeMarkers.push(marker);
+    bounds.push([s.lat, s.lng]);
+  });
+
+  if (bounds.length) {
+    routeMap.fitBounds(bounds, { padding: [30, 30] });
+  } else {
+    routeMap.setView([20.9674, -89.5926], 12);
+  }
 }
 
 if (driverId) startApp();
