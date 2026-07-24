@@ -2,8 +2,10 @@ let adminPass = sessionStorage.getItem('adminPass');
 let map, driverMarkers = {}, stopMarkers = [];
 let selectedStops = new Set();
 let lastStops = [];
+let driversById = {};
 let startPin = null, endPin = null;
 let startPinMarker = null, endPinMarker = null;
+let previewMarkers = [], previewLine = null, previewOrder = null, previewDriverId = null;
 
 function enter() {
   adminPass = document.getElementById('pass').value;
@@ -61,6 +63,7 @@ async function init() {
 
 async function loadDrivers() {
   const drivers = await api('/api/admin/drivers');
+  driversById = Object.fromEntries(drivers.map((d) => [String(d.id), d]));
   const list = document.getElementById('drivers');
   const select = document.getElementById('driverSelect');
   list.innerHTML = '';
@@ -104,19 +107,44 @@ function updateDriverMarker(driverId, lat, lng, name) {
     driverMarkers[driverId].setLatLng([lat, lng]);
   } else {
     const icon = L.divIcon({
-      html: '🚚',
-      iconSize: [24, 24],
+      html: '<div style="font-size:34px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚚</div>',
+      iconSize: [40, 40],
+      iconAnchor: [20, 20],
       className: '',
     });
     driverMarkers[driverId] = L.marker([lat, lng], { icon }).addTo(map).bindPopup(name || `Repartidor ${driverId}`);
   }
 }
 
-// Color estable por cliente (angulo dorado -> tonos bien distribuidos),
-// asi el mismo color identifica a un cliente tanto en la lista como en el mapa.
-function colorForCustomer(customerId) {
-  const hue = (Number(customerId) * 137.508) % 360;
+// Color estable a partir de un id (angulo dorado -> tonos bien distribuidos).
+// `offset` separa la paleta de clientes de la de repartidores para que no
+// coincidan visualmente por casualidad.
+function hslColor(id, offset = 0) {
+  const hue = ((Number(id) + offset) * 137.508) % 360;
   return `hsl(${hue}, 70%, 45%)`;
+}
+function colorForCustomer(customerId) {
+  return hslColor(customerId);
+}
+function colorForDriver(driverId) {
+  return hslColor(driverId, 1000);
+}
+
+function dotIcon(color, size) {
+  return L.divIcon({
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 0 3px rgba(0,0,0,.6)"></div>`,
+    iconSize: [size, size],
+    className: '',
+  });
+}
+
+function seqIcon(num, color) {
+  return L.divIcon({
+    html: `<div style="width:30px;height:30px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 0 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;">${num}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    className: '',
+  });
 }
 
 async function loadStops() {
@@ -129,38 +157,90 @@ async function loadStops() {
   stopMarkers = [];
 
   const pending = stops.filter((s) => s.status === 'pending');
+  const assigned = stops.filter((s) => s.status === 'assigned');
+  const delivered = stops.filter((s) => s.status === 'delivered');
 
-  pending
-    .forEach((s) => {
-      const color = colorForCustomer(s.customer_id);
-      const hasLocation = s.lat != null && s.lng != null;
+  // Pendientes: seleccionables para armar una ruta nueva.
+  pending.forEach((s) => {
+    const color = colorForCustomer(s.customer_id);
+    const hasLocation = s.lat != null && s.lng != null;
 
-      const div = document.createElement('div');
-      div.className = 'stop' + (hasLocation ? '' : ' stop-missing');
-      div.innerHTML = `
-        <label>
-          <input type="checkbox" data-id="${s.id}" onchange="toggleStop(${s.id}, this.checked)" ${hasLocation ? '' : 'disabled'} />
-          <span class="stop-color" style="background:${color}"></span>
-          <span>
-            ${s.name}<br>
-            <small>${s.address || ''}</small><br>
-            ${hasLocation ? '' : '<small class="stop-warn">⚠️ Sin ubicación — corrige el lead en Kommo y vuelve a sincronizar</small><br>'}
-            ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
-          </span>
-        </label>
-      `;
-      container.appendChild(div);
+    const div = document.createElement('div');
+    div.className = 'stop' + (hasLocation ? '' : ' stop-missing');
+    div.innerHTML = `
+      <label>
+        <input type="checkbox" data-id="${s.id}" onchange="toggleStop(${s.id}, this.checked)" ${hasLocation ? '' : 'disabled'} />
+        <span class="stop-color" style="background:${color}"></span>
+        <span>
+          ${s.name}<br>
+          <small>${s.address || ''}</small><br>
+          ${hasLocation ? '' : '<small class="stop-warn">⚠️ Sin ubicación — corrige el lead en Kommo y vuelve a sincronizar</small><br>'}
+          ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
+        </span>
+      </label>
+    `;
+    container.appendChild(div);
 
-      if (hasLocation) {
-        const icon = L.divIcon({
-          html: `<div style="width:16px;height:16px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 0 3px rgba(0,0,0,.6)"></div>`,
-          iconSize: [16, 16],
-          className: '',
-        });
-        const marker = L.marker([s.lat, s.lng], { icon }).addTo(map).bindPopup(s.name);
-        stopMarkers.push(marker);
-      }
-    });
+    if (hasLocation) {
+      const marker = L.marker([s.lat, s.lng], { icon: dotIcon(color, 16) }).addTo(map).bindPopup(s.name);
+      stopMarkers.push(marker);
+    }
+  });
+
+  // En ruta (ya asignados, todavia no entregados): numerados, color por repartidor.
+  assigned.forEach((s) => {
+    const driver = driversById[String(s.driver_id)];
+    const color = colorForDriver(s.driver_id);
+    const hasLocation = s.lat != null && s.lng != null;
+
+    const div = document.createElement('div');
+    div.className = 'stop stop-assigned';
+    div.innerHTML = `
+      <label>
+        <span class="stop-seq" style="background:${color}">${s.sequence ?? '?'}</span>
+        <span>
+          ${s.name}<br>
+          <small>Parada ${s.sequence ?? '?'} de ${driver ? driver.name : 'repartidor ' + s.driver_id}</small><br>
+          <small>${s.address || ''}</small><br>
+          ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
+        </span>
+      </label>
+    `;
+    container.appendChild(div);
+
+    if (hasLocation) {
+      const marker = L.marker([s.lat, s.lng], { icon: seqIcon(s.sequence ?? '?', color) })
+        .addTo(map)
+        .bindPopup(`Siguiente parada ${s.sequence} — ${s.name} (${driver ? driver.name : 'repartidor ' + s.driver_id})`);
+      stopMarkers.push(marker);
+    }
+  });
+
+  // Entregados hoy: informativo, atenuado.
+  delivered.forEach((s) => {
+    const driver = driversById[String(s.driver_id)];
+    const hasLocation = s.lat != null && s.lng != null;
+
+    const div = document.createElement('div');
+    div.className = 'stop stop-delivered';
+    div.innerHTML = `
+      <label>
+        <span>✅</span>
+        <span>
+          ${s.name}<br>
+          <small>Entregado por ${driver ? driver.name : 'repartidor ' + s.driver_id}</small>
+        </span>
+      </label>
+    `;
+    container.appendChild(div);
+
+    if (hasLocation) {
+      const marker = L.marker([s.lat, s.lng], {
+        icon: L.divIcon({ html: '<div style="font-size:18px;opacity:.7">✅</div>', iconSize: [22, 22], className: '' }),
+      }).addTo(map).bindPopup(`Entregado — ${s.name}`);
+      stopMarkers.push(marker);
+    }
+  });
 
   populateStartEndSelects(pending.filter((s) => s.lat != null && s.lng != null));
 }
@@ -192,10 +272,12 @@ function populateStartEndSelects(customers) {
 }
 
 function onStartSelectChange() {
+  clearPreview();
   if (document.getElementById('startSelect').value === 'pin') armPin('start');
 }
 
 function onEndSelectChange() {
+  clearPreview();
   if (document.getElementById('endSelect').value === 'pin') armPin('end');
 }
 
@@ -208,16 +290,17 @@ function armPin(which) {
       startPin = e.latlng;
       if (startPinMarker) map.removeLayer(startPinMarker);
       startPinMarker = L.marker(e.latlng, {
-        icon: L.divIcon({ html: '📍', iconSize: [24, 24], className: '' }),
+        icon: L.divIcon({ html: '<div style="font-size:32px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">📍</div>', iconSize: [40, 40], iconAnchor: [20, 38], className: '' }),
       }).addTo(map).bindPopup('Inicio de ruta');
     } else {
       endPin = e.latlng;
       if (endPinMarker) map.removeLayer(endPinMarker);
       endPinMarker = L.marker(e.latlng, {
-        icon: L.divIcon({ html: '🏁', iconSize: [24, 24], className: '' }),
+        icon: L.divIcon({ html: '<div style="font-size:32px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🏁</div>', iconSize: [40, 40], iconAnchor: [20, 38], className: '' }),
       }).addTo(map).bindPopup('Final de ruta');
     }
     label.textContent = `Elegido: ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+    clearPreview();
   });
 }
 
@@ -235,6 +318,7 @@ function resolvePoint(selectValue, pin) {
 }
 
 function toggleStop(id, checked) {
+  clearPreview();
   if (checked) selectedStops.add(id);
   else selectedStops.delete(id);
 }
@@ -335,7 +419,20 @@ async function syncKommo() {
   btn.textContent = '🔄 Sincronizar pedidos desde Kommo';
 }
 
-async function assignRoute() {
+function clearPreview() {
+  previewMarkers.forEach((m) => map.removeLayer(m));
+  previewMarkers = [];
+  if (previewLine) {
+    map.removeLayer(previewLine);
+    previewLine = null;
+  }
+  previewOrder = null;
+  previewDriverId = null;
+  const btn = document.getElementById('confirmRouteBtn');
+  if (btn) btn.style.display = 'none';
+}
+
+async function previewRoute() {
   const driverId = document.getElementById('driverSelect').value;
   if (!driverId) return alert('Selecciona un repartidor');
   if (!selectedStops.size) return alert('Selecciona al menos un pedido');
@@ -349,14 +446,52 @@ async function assignRoute() {
   const start = resolvePoint(startValue, startPin);
   const end = resolvePoint(endValue, endPin);
 
-  const result = await api('/api/admin/assign-route', {
+  const result = await api('/api/admin/preview-route', {
     method: 'POST',
     body: JSON.stringify({ driver_id: driverId, stop_ids: [...selectedStops], start, end }),
   });
+  if (result.error) return alert(result.error);
+
+  clearPreview();
+  previewOrder = result.order;
+  previewDriverId = driverId;
+
+  const path = [];
+  if (result.start) path.push([result.start.lat, result.start.lng]);
+
+  result.order.forEach((s) => {
+    const marker = L.marker([s.lat, s.lng], { icon: seqIcon(s.seq, '#111827') })
+      .addTo(map)
+      .bindPopup(`Siguiente parada ${s.seq} — ${s.name}`);
+    previewMarkers.push(marker);
+    path.push([s.lat, s.lng]);
+  });
+
+  if (result.end) path.push([result.end.lat, result.end.lng]);
+
+  if (path.length > 1) {
+    previewLine = L.polyline(path, { color: '#111827', weight: 3, dashArray: '6,8' }).addTo(map);
+    map.fitBounds(previewLine.getBounds(), { padding: [40, 40] });
+  }
+
+  document.getElementById('confirmRouteBtn').style.display = 'block';
+}
+
+async function confirmRoute() {
+  if (!previewOrder || !previewDriverId) return;
+
+  const result = await api('/api/admin/assign-route', {
+    method: 'POST',
+    body: JSON.stringify({
+      driver_id: previewDriverId,
+      ordered_stop_ids: previewOrder.map((s) => s.stop_id),
+    }),
+  });
 
   if (result.error) return alert(result.error);
-  alert('Ruta asignada:\n' + result.order.join('\n'));
+  alert('Ruta asignada.');
   selectedStops.clear();
+  clearPreview();
   await loadStops();
 }
 

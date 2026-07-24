@@ -101,14 +101,15 @@ router.post('/kommo/field-config', (req, res) => {
   res.json({ ok: true });
 });
 
-// --- Customers / stops pendientes ---
+// --- Customers / stops (pendientes + asignados + entregados hoy, para ver
+// en el mapa quien va, quien falta y quien ya entrego) ---
 router.get('/stops', (req, res) => {
   const stops = db
     .prepare(
-      `SELECT s.id, s.status, s.sequence, s.driver_id,
+      `SELECT s.id, s.status, s.sequence, s.driver_id, s.delivered_at,
               c.id as customer_id, c.name, c.address, c.lat, c.lng, c.kommo_lead_id
        FROM stops s JOIN customers c ON c.id = s.customer_id
-       WHERE s.status != 'delivered'
+       WHERE s.status != 'delivered' OR date(s.delivered_at) = date('now')
        ORDER BY s.driver_id, s.sequence`
     )
     .all();
@@ -123,22 +124,22 @@ router.get('/stops', (req, res) => {
   res.json(withKommoUrl);
 });
 
-// --- Asignar y optimizar ruta para un repartidor ---
-router.post('/assign-route', async (req, res) => {
-  // stop_ids: ids de stops pendientes a asignar
-  // start/end (opcionales): { lat, lng } - un pin en el mapa o la ubicacion
-  // de un cliente, resuelto ya en el frontend. Si no se manda `start`, se
-  // usa la ubicacion actual del repartidor (comportamiento de siempre).
+// Resuelve el punto de partida (pin/cliente resuelto ya en el frontend, o
+// la ubicacion actual del repartidor si no se manda `start`) y los stops
+// con ubicacion valida, compartido por preview-route y assign-route.
+function resolveRouteInputs(req, res) {
   const { driver_id, stop_ids, start, end } = req.body;
   if (!driver_id || !Array.isArray(stop_ids) || !stop_ids.length) {
-    return res.status(400).json({ error: 'Faltan datos' });
+    res.status(400).json({ error: 'Faltan datos' });
+    return null;
   }
 
   let startLoc = start && start.lat != null && start.lng != null ? start : null;
   if (!startLoc) {
     const loc = db.prepare('SELECT lat, lng FROM driver_locations WHERE driver_id = ?').get(driver_id);
     if (!loc) {
-      return res.status(400).json({ error: 'No hay ubicacion reciente de ese repartidor todavia' });
+      res.status(400).json({ error: 'No hay ubicacion reciente de ese repartidor todavia' });
+      return null;
     }
     startLoc = loc;
   }
@@ -155,20 +156,50 @@ router.post('/assign-route', async (req, res) => {
 
   const stops = allStops.filter((s) => s.lat != null && s.lng != null);
   if (!stops.length) {
-    return res.status(400).json({ error: 'Ninguno de los pedidos seleccionados tiene ubicacion' });
+    res.status(400).json({ error: 'Ninguno de los pedidos seleccionados tiene ubicacion' });
+    return null;
   }
 
+  return { driver_id, startLoc, endLoc, stops };
+}
+
+// --- Vista previa: calcula el orden optimo pero NO guarda nada todavia ---
+router.post('/preview-route', async (req, res) => {
+  const inputs = resolveRouteInputs(req, res);
+  if (!inputs) return;
+  const { startLoc, endLoc, stops } = inputs;
+
   const ordered = await optimizeRoute(startLoc, stops, endLoc);
+
+  res.json({
+    start: startLoc,
+    end: endLoc,
+    order: ordered.map((o, idx) => ({
+      stop_id: o.stop_id,
+      name: o.name,
+      lat: o.lat,
+      lng: o.lng,
+      seq: idx + 1,
+    })),
+  });
+});
+
+// --- Confirma y guarda el orden ya calculado (via preview-route) ---
+router.post('/assign-route', (req, res) => {
+  const { driver_id, ordered_stop_ids } = req.body;
+  if (!driver_id || !Array.isArray(ordered_stop_ids) || !ordered_stop_ids.length) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
 
   const update = db.prepare(
     `UPDATE stops SET driver_id = ?, sequence = ?, status = 'assigned', assigned_at = datetime('now') WHERE id = ?`
   );
-  const tx = db.transaction((items) => {
-    items.forEach((item, idx) => update.run(driver_id, idx + 1, item.stop_id));
+  const tx = db.transaction((ids) => {
+    ids.forEach((id, idx) => update.run(driver_id, idx + 1, id));
   });
-  tx(ordered);
+  tx(ordered_stop_ids);
 
-  res.json({ ok: true, order: ordered.map((o) => o.name) });
+  res.json({ ok: true });
 });
 
 module.exports = router;

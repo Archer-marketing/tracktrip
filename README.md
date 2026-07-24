@@ -198,8 +198,13 @@ pedidos pendientes.
    desde donde está el repartidor ahora mismo y termina donde sea más
    corto — pero puedes cambiar eso con **"Punto de partida"** y **"Punto
    final"**: elige un cliente ya cargado, o "Elegir en el mapa" y haz
-   clic donde quieras (por ejemplo, la bodega). Clic en "Optimizar ruta y
-   asignar".
+   clic donde quieras (por ejemplo, la bodega).
+   Clic en **"🔍 Vista previa de ruta"** — el mapa te muestra el orden
+   propuesto con números (1, 2, 3...) para que revises que tenga sentido
+   antes de confirmar. Si te convence, dale **"✅ Confirmar y asignar"**.
+   Mientras un pedido está en ruta (asignado, sin entregar) se ve en el
+   mapa/lista con su número de parada y el color del repartidor; los
+   entregados el día de hoy aparecen marcados con ✅.
 5. Al repartidor le aparece automáticamente "tu siguiente parada" con
    botón directo a Google Maps. Cuando entrega, toca "Marcar como
    entregado" y le aparece la siguiente.
