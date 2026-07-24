@@ -1,6 +1,9 @@
 let adminPass = sessionStorage.getItem('adminPass');
 let map, driverMarkers = {}, stopMarkers = [];
 let selectedStops = new Set();
+let lastStops = [];
+let startPin = null, endPin = null;
+let startPinMarker = null, endPinMarker = null;
 
 function enter() {
   adminPass = document.getElementById('pass').value;
@@ -92,14 +95,16 @@ function colorForCustomer(customerId) {
 
 async function loadStops() {
   const stops = await api('/api/admin/stops');
+  lastStops = stops;
   const container = document.getElementById('stops');
   container.innerHTML = '';
 
   stopMarkers.forEach((m) => map.removeLayer(m));
   stopMarkers = [];
 
-  stops
-    .filter((s) => s.status === 'pending')
+  const pending = stops.filter((s) => s.status === 'pending');
+
+  pending
     .forEach((s) => {
       const color = colorForCustomer(s.customer_id);
       const hasLocation = s.lat != null && s.lng != null;
@@ -130,6 +135,77 @@ async function loadStops() {
         stopMarkers.push(marker);
       }
     });
+
+  populateStartEndSelects(pending.filter((s) => s.lat != null && s.lng != null));
+}
+
+// Llena los selects de "punto de partida" / "punto final" con los clientes
+// que ya tienen ubicacion, sin perder lo que ya estaba elegido.
+function populateStartEndSelects(customers) {
+  const options = customers
+    .map((s) => `<option value="customer:${s.customer_id}">${s.name}</option>`)
+    .join('');
+
+  const startSelect = document.getElementById('startSelect');
+  const prevStart = startSelect.value;
+  startSelect.innerHTML = `
+    <option value="driver">Ubicación actual del repartidor</option>
+    <option value="pin">📍 Elegir en el mapa</option>
+    ${options}
+  `;
+  if ([...startSelect.options].some((o) => o.value === prevStart)) startSelect.value = prevStart;
+
+  const endSelect = document.getElementById('endSelect');
+  const prevEnd = endSelect.value;
+  endSelect.innerHTML = `
+    <option value="">(automático, sin punto fijo)</option>
+    <option value="pin">🏁 Elegir en el mapa</option>
+    ${options}
+  `;
+  if ([...endSelect.options].some((o) => o.value === prevEnd)) endSelect.value = prevEnd;
+}
+
+function onStartSelectChange() {
+  if (document.getElementById('startSelect').value === 'pin') armPin('start');
+}
+
+function onEndSelectChange() {
+  if (document.getElementById('endSelect').value === 'pin') armPin('end');
+}
+
+function armPin(which) {
+  const label = document.getElementById(which === 'start' ? 'startPinLabel' : 'endPinLabel');
+  label.textContent = 'Haz clic en el mapa para elegir el punto...';
+
+  map.once('click', (e) => {
+    if (which === 'start') {
+      startPin = e.latlng;
+      if (startPinMarker) map.removeLayer(startPinMarker);
+      startPinMarker = L.marker(e.latlng, {
+        icon: L.divIcon({ html: '📍', iconSize: [24, 24], className: '' }),
+      }).addTo(map).bindPopup('Inicio de ruta');
+    } else {
+      endPin = e.latlng;
+      if (endPinMarker) map.removeLayer(endPinMarker);
+      endPinMarker = L.marker(e.latlng, {
+        icon: L.divIcon({ html: '🏁', iconSize: [24, 24], className: '' }),
+      }).addTo(map).bindPopup('Final de ruta');
+    }
+    label.textContent = `Elegido: ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+  });
+}
+
+// Resuelve el valor de un select de inicio/fin a {lat,lng}, o null si no aplica.
+function resolvePoint(selectValue, pin) {
+  if (selectValue === 'pin') {
+    return pin ? { lat: pin.lat, lng: pin.lng } : null;
+  }
+  if (selectValue && selectValue.startsWith('customer:')) {
+    const customerId = selectValue.split(':')[1];
+    const cust = lastStops.find((s) => String(s.customer_id) === customerId);
+    return cust && cust.lat != null ? { lat: cust.lat, lng: cust.lng } : null;
+  }
+  return null;
 }
 
 function toggleStop(id, checked) {
@@ -238,9 +314,18 @@ async function assignRoute() {
   if (!driverId) return alert('Selecciona un repartidor');
   if (!selectedStops.size) return alert('Selecciona al menos un pedido');
 
+  const startValue = document.getElementById('startSelect').value;
+  const endValue = document.getElementById('endSelect').value;
+
+  if (startValue === 'pin' && !startPin) return alert('Elige el punto de partida en el mapa');
+  if (endValue === 'pin' && !endPin) return alert('Elige el punto final en el mapa');
+
+  const start = resolvePoint(startValue, startPin);
+  const end = resolvePoint(endValue, endPin);
+
   const result = await api('/api/admin/assign-route', {
     method: 'POST',
-    body: JSON.stringify({ driver_id: driverId, stop_ids: [...selectedStops] }),
+    body: JSON.stringify({ driver_id: driverId, stop_ids: [...selectedStops], start, end }),
   });
 
   if (result.error) return alert(result.error);

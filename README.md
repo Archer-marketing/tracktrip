@@ -192,9 +192,12 @@ pedidos pendientes.
    los repartidores en el mapa en tiempo real.
 3. Le das clic a "Sincronizar pedidos desde Kommo" para traer los pedidos
    nuevos.
-4. Marcas qué pedidos van con qué repartidor, clic en "Optimizar ruta y
-   asignar" — el sistema calcula el orden más corto empezando desde donde
-   está el repartidor ahora mismo.
+4. Marcas qué pedidos van con qué repartidor. Por defecto la ruta empieza
+   desde donde está el repartidor ahora mismo y termina donde sea más
+   corto — pero puedes cambiar eso con **"Punto de partida"** y **"Punto
+   final"**: elige un cliente ya cargado, o "Elegir en el mapa" y haz
+   clic donde quieras (por ejemplo, la bodega). Clic en "Optimizar ruta y
+   asignar".
 5. Al repartidor le aparece automáticamente "tu siguiente parada" con
    botón directo a Google Maps. Cuando entrega, toca "Marcar como
    entregado" y le aparece la siguiente.

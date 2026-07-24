@@ -26,14 +26,17 @@ async function getOsrmDistanceMatrix(points) {
   }
 }
 
-// Algoritmo de "vecino mas cercano" empezando desde el punto del repartidor.
-// points[0] es SIEMPRE la posicion actual del repartidor (no se incluye en el resultado).
-async function optimizeRoute(driverLocation, stops) {
+// Algoritmo de "vecino mas cercano" empezando desde `startLocation` (por
+// defecto la posicion actual del repartidor, pero puede ser un pin en el
+// mapa o la ubicacion de un cliente). Si se pasa `endLocation`, al final
+// se reacomoda el pedido mas cercano a ese punto para que quede ultimo
+// (asi la ruta termina cerca de donde se indique, sea un pin o un cliente).
+async function optimizeRoute(startLocation, stops, endLocation) {
   // stops: [{ id, lat, lng, ... }]
   if (stops.length === 0) return [];
   if (stops.length === 1) return [stops[0]];
 
-  const points = [driverLocation, ...stops];
+  const points = [startLocation, ...stops];
   let matrix = await getOsrmDistanceMatrix(points);
 
   const distance = (i, j) => {
@@ -41,9 +44,9 @@ async function optimizeRoute(driverLocation, stops) {
     return haversine(points[i], points[j]);
   };
 
-  const remaining = stops.map((_, idx) => idx + 1); // indices en `points`, offset por el repartidor
+  const remaining = stops.map((_, idx) => idx + 1); // indices en `points`, offset por el inicio
   const order = [];
-  let current = 0; // indice del repartidor
+  let current = 0; // indice del punto de partida
 
   while (remaining.length) {
     let bestIdx = 0;
@@ -58,6 +61,20 @@ async function optimizeRoute(driverLocation, stops) {
     const next = remaining.splice(bestIdx, 1)[0];
     order.push(stops[next - 1]);
     current = next;
+  }
+
+  if (endLocation) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    order.forEach((s, idx) => {
+      const d = haversine(s, endLocation);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = idx;
+      }
+    });
+    const [closestToEnd] = order.splice(bestIdx, 1);
+    order.push(closestToEnd);
   }
 
   return order;

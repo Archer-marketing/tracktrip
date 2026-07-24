@@ -118,15 +118,24 @@ router.get('/stops', (req, res) => {
 
 // --- Asignar y optimizar ruta para un repartidor ---
 router.post('/assign-route', async (req, res) => {
-  const { driver_id, stop_ids } = req.body; // stop_ids: ids de stops pendientes a asignar
+  // stop_ids: ids de stops pendientes a asignar
+  // start/end (opcionales): { lat, lng } - un pin en el mapa o la ubicacion
+  // de un cliente, resuelto ya en el frontend. Si no se manda `start`, se
+  // usa la ubicacion actual del repartidor (comportamiento de siempre).
+  const { driver_id, stop_ids, start, end } = req.body;
   if (!driver_id || !Array.isArray(stop_ids) || !stop_ids.length) {
     return res.status(400).json({ error: 'Faltan datos' });
   }
 
-  const loc = db.prepare('SELECT lat, lng FROM driver_locations WHERE driver_id = ?').get(driver_id);
-  if (!loc) {
-    return res.status(400).json({ error: 'No hay ubicacion reciente de ese repartidor todavia' });
+  let startLoc = start && start.lat != null && start.lng != null ? start : null;
+  if (!startLoc) {
+    const loc = db.prepare('SELECT lat, lng FROM driver_locations WHERE driver_id = ?').get(driver_id);
+    if (!loc) {
+      return res.status(400).json({ error: 'No hay ubicacion reciente de ese repartidor todavia' });
+    }
+    startLoc = loc;
   }
+  const endLoc = end && end.lat != null && end.lng != null ? end : null;
 
   const placeholders = stop_ids.map(() => '?').join(',');
   const allStops = db
@@ -142,7 +151,7 @@ router.post('/assign-route', async (req, res) => {
     return res.status(400).json({ error: 'Ninguno de los pedidos seleccionados tiene ubicacion' });
   }
 
-  const ordered = await optimizeRoute(loc, stops);
+  const ordered = await optimizeRoute(startLoc, stops, endLoc);
 
   const update = db.prepare(
     `UPDATE stops SET driver_id = ?, sequence = ?, status = 'assigned', assigned_at = datetime('now') WHERE id = ?`
