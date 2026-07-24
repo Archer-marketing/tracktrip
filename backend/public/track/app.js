@@ -43,13 +43,16 @@ function renderEnRuta(data) {
   const sub = document.getElementById('subtext');
 
   if (data.remaining === 0) {
-    pill.textContent = '🚚 ¡Tu repartidor va en camino a tu pedido!';
+    pill.textContent = '🚚 ¡Estamos yendo contigo!';
     big.textContent = '';
-    sub.textContent = 'Prepárate, ¡ya casi llega!';
+    sub.textContent = 'Tu repartidor está en camino, prepárate';
   } else {
     pill.textContent = '🚚 Tu pedido va en ruta';
     big.textContent = data.remaining;
-    sub.textContent = data.remaining === 1 ? 'pedido antes que el tuyo' : 'pedidos antes que el tuyo';
+    sub.textContent =
+      data.remaining === 1
+        ? 'Hay 1 pedido antes que el tuyo'
+        : `Hay ${data.remaining} pedidos antes que el tuyo`;
   }
 
   const bounds = [];
