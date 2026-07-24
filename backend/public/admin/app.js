@@ -33,10 +33,18 @@ async function init() {
   document.getElementById('gate').style.display = 'none';
   document.getElementById('layout').style.display = 'flex';
 
-  map = L.map('map').setView([19.4326, -99.1332], 12); // default CDMX, se ajusta solo
+  map = L.map('map').setView([20.9674, -89.5926], 12); // default Merida, se ajusta con geolocalizacion si se puede
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap',
   }).addTo(map);
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
+      () => {}, // si el usuario niega el permiso o falla, se queda en Merida
+      { timeout: 5000 }
+    );
+  }
 
   await loadDrivers();
   await loadStops();
