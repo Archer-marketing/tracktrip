@@ -27,6 +27,10 @@
   button:hover { background: #1d4ed8; }
   .btn-confirm { background: #16a34a; }
   .btn-confirm:hover { background: #15803d; }
+  .preview-item { display: flex; align-items: center; gap: 8px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; margin-top: 6px; font-size: 13px; }
+  .preview-item span.name { flex: 1; }
+  .mini-btn { width: auto; padding: 2px 8px; margin: 0; font-size: 14px; }
+  .mini-btn:disabled { opacity: 0.3; cursor: default; }
   .pass-gate { position: fixed; inset: 0; background: white; display: flex; align-items: center; justify-content: center; }
   .driver-tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: #dbeafe; color: #1e3a8a; margin-left: 6px; }
 </style>
@@ -81,6 +85,7 @@
     <div id="endPinLabel" class="pin-label"></div>
 
     <button onclick="previewRoute()">🔍 Vista previa de ruta</button>
+    <div id="previewList"></div>
     <button id="confirmRouteBtn" class="btn-confirm" onclick="confirmRoute()" style="display:none;">✅ Confirmar y asignar</button>
   </div>
 </div>

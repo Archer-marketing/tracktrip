@@ -6,6 +6,7 @@ let driversById = {};
 let startPin = null, endPin = null;
 let startPinMarker = null, endPinMarker = null;
 let previewMarkers = [], previewLine = null, previewOrder = null, previewDriverId = null;
+let previewStart = null, previewEnd = null;
 
 function enter() {
   adminPass = document.getElementById('pass').value;
@@ -428,8 +429,12 @@ function clearPreview() {
   }
   previewOrder = null;
   previewDriverId = null;
+  previewStart = null;
+  previewEnd = null;
   const btn = document.getElementById('confirmRouteBtn');
   if (btn) btn.style.display = 'none';
+  const list = document.getElementById('previewList');
+  if (list) list.innerHTML = '';
 }
 
 async function previewRoute() {
@@ -455,11 +460,34 @@ async function previewRoute() {
   clearPreview();
   previewOrder = result.order;
   previewDriverId = driverId;
+  previewStart = result.start;
+  previewEnd = result.end;
+
+  redrawPreview();
 
   const path = [];
-  if (result.start) path.push([result.start.lat, result.start.lng]);
+  if (previewStart) path.push([previewStart.lat, previewStart.lng]);
+  previewOrder.forEach((s) => path.push([s.lat, s.lng]));
+  if (previewEnd) path.push([previewEnd.lat, previewEnd.lng]);
+  if (path.length > 1) {
+    map.fitBounds(L.polyline(path).getBounds(), { padding: [40, 40] });
+  }
+}
 
-  result.order.forEach((s) => {
+// Redibuja marcadores numerados + linea segun el orden actual de previewOrder
+// (ya sea recien calculado, o despues de moverlo a mano con las flechas).
+function redrawPreview() {
+  previewMarkers.forEach((m) => map.removeLayer(m));
+  previewMarkers = [];
+  if (previewLine) {
+    map.removeLayer(previewLine);
+    previewLine = null;
+  }
+
+  const path = [];
+  if (previewStart) path.push([previewStart.lat, previewStart.lng]);
+
+  previewOrder.forEach((s) => {
     const marker = L.marker([s.lat, s.lng], { icon: seqIcon(s.seq, '#111827') })
       .addTo(map)
       .bindPopup(`Siguiente parada ${s.seq} — ${s.name}`);
@@ -467,14 +495,44 @@ async function previewRoute() {
     path.push([s.lat, s.lng]);
   });
 
-  if (result.end) path.push([result.end.lat, result.end.lng]);
+  if (previewEnd) path.push([previewEnd.lat, previewEnd.lng]);
 
   if (path.length > 1) {
     previewLine = L.polyline(path, { color: '#111827', weight: 3, dashArray: '6,8' }).addTo(map);
-    map.fitBounds(previewLine.getBounds(), { padding: [40, 40] });
   }
 
+  renderPreviewList();
   document.getElementById('confirmRouteBtn').style.display = 'block';
+}
+
+function renderPreviewList() {
+  const container = document.getElementById('previewList');
+  if (!previewOrder) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = previewOrder
+    .map(
+      (s, idx) => `
+      <div class="preview-item">
+        <span class="stop-seq" style="background:#111827">${s.seq}</span>
+        <span class="name">${s.name}</span>
+        <button class="mini-btn" onclick="movePreviewStop(${idx}, -1)" ${idx === 0 ? 'disabled' : ''}>▲</button>
+        <button class="mini-btn" onclick="movePreviewStop(${idx}, 1)" ${idx === previewOrder.length - 1 ? 'disabled' : ''}>▼</button>
+      </div>
+    `
+    )
+    .join('');
+}
+
+// Mueve manualmente una parada de la vista previa (sube/baja), por si el
+// admin conoce el terreno mejor que el algoritmo (calles cerradas, trafico, etc).
+function movePreviewStop(idx, dir) {
+  const target = idx + dir;
+  if (!previewOrder || target < 0 || target >= previewOrder.length) return;
+  [previewOrder[idx], previewOrder[target]] = [previewOrder[target], previewOrder[idx]];
+  previewOrder.forEach((s, i) => (s.seq = i + 1));
+  redrawPreview();
 }
 
 async function confirmRoute() {
