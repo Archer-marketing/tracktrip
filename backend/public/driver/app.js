@@ -5,6 +5,7 @@ let watchId;
 let pollIntervalId;
 let routeMap, routeMarkers = [];
 let routeVisible = false;
+let myLat = null, myLng = null, myLocationMarker = null;
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/driver/sw.js').catch(() => {});
@@ -94,6 +95,10 @@ function startTracking() {
     (pos) => {
       const { latitude, longitude } = pos.coords;
       setStatus(true);
+      myLat = latitude;
+      myLng = longitude;
+      if (routeVisible) updateMyLocationMarker();
+
       const payload = { driver_id: driverId, lat: latitude, lng: longitude };
       if (socket && socket.connected) {
         socket.emit('driver:location', payload);
@@ -212,6 +217,27 @@ function renderRouteList(stops) {
     .join('');
 }
 
+// Marcador de "aqui estoy yo" en el mapa de ruta completa, actualizado en
+// vivo cada vez que llega una posicion nueva del GPS (no solo al recargar
+// la ruta), asi el repartidor se ve moverse en el mapa igual que en admin.
+function updateMyLocationMarker() {
+  if (!routeMap || myLat == null || myLng == null) return;
+  const pos = [myLat, myLng];
+  if (myLocationMarker) {
+    myLocationMarker.setLatLng(pos);
+  } else {
+    myLocationMarker = L.marker(pos, {
+      icon: L.divIcon({
+        html: '<div style="font-size:30px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚚</div>',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        className: '',
+      }),
+      zIndexOffset: 1000,
+    }).addTo(routeMap).bindPopup('Tú estás aquí');
+  }
+}
+
 function renderRouteMap(stops) {
   if (!routeMap) {
     routeMap = L.map('routeMap');
@@ -238,6 +264,9 @@ function renderRouteMap(stops) {
     routeMarkers.push(marker);
     bounds.push([s.lat, s.lng]);
   });
+
+  updateMyLocationMarker();
+  if (myLat != null && myLng != null) bounds.push([myLat, myLng]);
 
   if (bounds.length) {
     routeMap.fitBounds(bounds, { padding: [30, 30] });

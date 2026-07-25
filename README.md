@@ -239,7 +239,8 @@ entregado nunca se toca.
    entregado" y le aparece la siguiente. Si quiere ver todo su recorrido
    (por ejemplo si un cliente no está y prefiere ver qué más le falta),
    puede tocar "🗺️ Ver ruta completa" — mapa y lista con todas sus
-   paradas del día, marcando cuáles ya entregó.
+   paradas del día, marcando cuáles ya entregó, y con su propia
+   ubicación en tiempo real (🚚) para orientarse respecto a las paradas.
 6. Al confirmar la ruta (paso 4), cada pedido recién asignado recibe una
    **liga pública de rastreo** (`https://tudominio.com/track/<token>`),
    única por pedido y válida 24 horas. Ahí el cliente ve el mapa con su
