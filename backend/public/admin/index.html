@@ -23,8 +23,9 @@
   .stop-delivered { opacity: 0.55; }
   .pin-label { font-size: 12px; color: #64748b; margin-top: 4px; }
   select, button, input[type="text"] { width: 100%; padding: 10px; margin-top: 8px; border-radius: 8px; border: 1px solid #cbd5e1; }
-  button { background: #2563eb; color: white; border: none; font-weight: 600; cursor: pointer; }
+  button { background: #2563eb; color: white; border: none; font-weight: 600; cursor: pointer; transition: background-color .15s ease, transform .05s ease; }
   button:hover { background: #1d4ed8; }
+  button:active { transform: scale(0.97); }
   .btn-confirm { background: #16a34a; }
   .btn-confirm:hover { background: #15803d; }
   .preview-item { display: flex; align-items: center; gap: 8px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; margin-top: 6px; font-size: 13px; }
@@ -34,8 +35,19 @@
   .pass-gate { position: fixed; inset: 0; background: white; display: flex; align-items: center; justify-content: center; }
   .driver-tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: #dbeafe; color: #1e3a8a; margin-left: 6px; }
   .tab-bar { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; }
-  .tab-btn { width: auto; white-space: nowrap; padding: 6px 12px; font-size: 12px; background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; border-radius: 999px; margin: 0; font-weight: 600; }
-  .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+  /* Selectores mas especificos que "button:hover" (con id, para no perder
+     contra el hover generico de arriba y que las pestanas no "brinquen"
+     a azul solido al pasar el mouse). */
+  #stopTabs.tab-bar .tab-btn {
+    width: auto; white-space: nowrap; padding: 6px 12px; font-size: 12px;
+    background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0;
+    border-radius: 999px; margin: 0; font-weight: 600;
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform .05s ease;
+  }
+  #stopTabs.tab-bar .tab-btn:hover { background: #e2e8f0; }
+  #stopTabs.tab-bar .tab-btn:active { transform: scale(0.96); }
+  #stopTabs.tab-bar .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+  #stopTabs.tab-bar .tab-btn.active:hover { background: #1d4ed8; }
 </style>
 </head>
 <body>

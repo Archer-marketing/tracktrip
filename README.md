@@ -64,6 +64,8 @@ NOMINATIM_URL=https://nominatim.openstreetmap.org
 NOMINATIM_USER_AGENT=mi-delivery-tracker (contacto@tuempresa.com)
 OSRM_URL=http://localhost:5000
 KOMMO_TRACKING_FIELD_ID=2445646
+KOMMO_BOT_3_AWAY_ID=103880
+KOMMO_BOT_NEXT_ID=103878
 ```
 (`PORT` y `SQLITE_PATH` ya vienen fijos en el `Dockerfile`/`docker-compose.yml`,
 no hace falta tocarlos). Ver la sección **"Configurar Kommo"** más abajo para
@@ -244,10 +246,17 @@ entregado nunca se toca.
    repartidor en tiempo real y cuántos pedidos le faltan para llegar al
    suyo — sin contraseña, pensada para compartirse directo con él. Esa
    misma liga se escribe automáticamente en el campo personalizado
-   `KOMMO_TRACKING_FIELD_ID` del lead en Kommo (respetando el límite de
-   7 solicitudes/segundo de Kommo). Por ahora solo se escribe el campo —
-   no se manda nada al cliente automáticamente (WhatsApp/SMS), eso queda
-   para una automatización futura.
+   `KOMMO_TRACKING_FIELD_ID` del lead en Kommo.
+7. Además, cada vez que se asigna una ruta o el repartidor marca un
+   pedido como entregado, el sistema revisa cuántos pedidos le faltan a
+   cada lead y dispara automáticamente el Salesbot correspondiente en
+   Kommo: **`KOMMO_BOT_3_AWAY_ID`** cuando a un pedido le faltan
+   exactamente 3 antes que el suyo, y **`KOMMO_BOT_NEXT_ID`** cuando ya
+   es el siguiente. Si una ruta se asigna con menos de 3 pedidos antes
+   del suyo, el primero nunca se dispara — solo el de "es el siguiente"
+   cuando le toque. Cada uno se dispara una sola vez por pedido. Ambos
+   pasan por la misma cola con límite de tasa (máximo ~6
+   solicitudes/segundo a Kommo, con margen sobre su límite de 7).
 
 ## Limitación importante sobre "segundo plano"
 Ningún navegador (Chrome, Safari) garantiza mandar ubicación si el

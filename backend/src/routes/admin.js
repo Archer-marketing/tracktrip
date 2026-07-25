@@ -14,6 +14,7 @@ const {
 const { optimizeRoute } = require('../services/routingService');
 const { createTrackingLinksForStops } = require('../services/trackingService');
 const { getDefaultStartPoint, setDefaultStartPoint } = require('../services/startPointService');
+const { checkBotTriggersForDriver } = require('../services/botNotificationService');
 
 const router = express.Router();
 
@@ -247,6 +248,12 @@ router.post('/assign-route', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   createTrackingLinksForStops(baseUrl, ordered_stop_ids).catch((err) => {
     console.error('Error generando ligas de rastreo:', err.message);
+  });
+
+  // Dispara los salesbots de "faltan 3" / "eres el siguiente" segun quede
+  // el orden recien asignado (fire-and-forget, igual que las ligas).
+  checkBotTriggersForDriver(driver_id).catch((err) => {
+    console.error('Error disparando salesbots de Kommo:', err.message);
   });
 
   res.json({ ok: true });

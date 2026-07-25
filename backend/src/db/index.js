@@ -75,6 +75,15 @@ try {
   db.exec(`ALTER TABLE customers ADD COLUMN invoice TEXT`);
 } catch (e) {}
 
+// Marca si ya se disparo el salesbot de "faltan 3" / "eres el siguiente"
+// para este pedido, para no repetir el disparo en cada entrega/poll.
+try {
+  db.exec(`ALTER TABLE stops ADD COLUMN notified_3_away INTEGER DEFAULT 0`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE stops ADD COLUMN notified_next INTEGER DEFAULT 0`);
+} catch (e) {}
+
 // Punto de partida por defecto para armar rutas (ej. la oficina/bodega).
 // Se deja precargado con esta liga solo la primera vez; si el admin la
 // cambia despues desde el panel, no se vuelve a pisar.

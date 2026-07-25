@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const { checkBotTriggersForDriver } = require('../services/botNotificationService');
 
 const router = express.Router();
 
@@ -69,10 +70,19 @@ router.get('/route/:driverId', (req, res) => {
 
 router.post('/complete-stop', (req, res) => {
   const { stop_id } = req.body;
+  const stop = db.prepare('SELECT driver_id FROM stops WHERE id = ?').get(stop_id);
   db.prepare(`UPDATE stops SET status = 'delivered', delivered_at = datetime('now') WHERE id = ?`).run(
     stop_id
   );
   res.json({ ok: true });
+
+  // Al entregar, los que faltaban antes de los demas pedidos de este
+  // repartidor bajan uno - revisa si alguno acaba de quedar a 3 o a 0.
+  if (stop && stop.driver_id) {
+    checkBotTriggersForDriver(stop.driver_id).catch((err) => {
+      console.error('Error disparando salesbots de Kommo:', err.message);
+    });
+  }
 });
 
 module.exports = router;

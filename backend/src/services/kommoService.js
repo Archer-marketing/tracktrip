@@ -40,6 +40,15 @@ async function updateLeadTrackingField(leadId, url) {
   );
 }
 
+// Dispara un Salesbot de Kommo sobre un lead (ej. avisar "faltan 3 pedidos"
+// o "eres el siguiente"). Pasa por la misma cola con limite de tasa.
+async function runSalesbot(botId, leadId) {
+  const client = kommoClient();
+  return throttledKommoCall(() =>
+    client.post(`/bots/${botId}/run`, { entity_id: Number(leadId), entity_type: 'leads' })
+  );
+}
+
 // Embudos (pipelines) y etapas (statuses) de la cuenta, para el selector del panel.
 async function getPipelines() {
   const client = kommoClient();
@@ -242,4 +251,5 @@ module.exports = {
   getSyncInvoiceFieldConfig,
   setSyncInvoiceFieldConfig,
   updateLeadTrackingField,
+  runSalesbot,
 };
