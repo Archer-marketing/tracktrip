@@ -243,18 +243,16 @@ router.post('/assign-route', (req, res) => {
   tx(ordered_stop_ids);
 
   // Genera/renueva la liga publica de rastreo (24h) de cada pedido recien
-  // asignado y la manda al campo de Kommo configurado. No se espera aqui
-  // (fire-and-forget) para no atrasar la respuesta al panel.
+  // asignado y la manda al campo de Kommo configurado PRIMERO, y solo
+  // hasta que eso termine dispara los salesbots - asi el bot nunca manda
+  // un mensaje con el campo de liga todavia vacio. No se espera la cadena
+  // completa aqui (fire-and-forget) para no atrasar la respuesta al panel.
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  createTrackingLinksForStops(baseUrl, ordered_stop_ids).catch((err) => {
-    console.error('Error generando ligas de rastreo:', err.message);
-  });
-
-  // Dispara los salesbots de "faltan 3" / "eres el siguiente" segun quede
-  // el orden recien asignado (fire-and-forget, igual que las ligas).
-  checkBotTriggersForDriver(driver_id).catch((err) => {
-    console.error('Error disparando salesbots de Kommo:', err.message);
-  });
+  createTrackingLinksForStops(baseUrl, ordered_stop_ids)
+    .then(() => checkBotTriggersForDriver(driver_id))
+    .catch((err) => {
+      console.error('Error generando ligas de rastreo / disparando salesbots:', err.message);
+    });
 
   res.json({ ok: true });
 });
