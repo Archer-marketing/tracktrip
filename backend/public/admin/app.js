@@ -8,6 +8,7 @@ let startPinMarker = null, endPinMarker = null;
 let previewMarkers = [], previewLine = null, previewOrder = null, previewDriverId = null;
 let previewStart = null, previewEnd = null;
 let activeTab = 'pending'; // 'pending' o el id de un repartidor
+let defaultStartPoint = null;
 
 function enter() {
   adminPass = document.getElementById('pass').value;
@@ -51,6 +52,7 @@ async function init() {
   }
 
   await loadDrivers();
+  await loadDefaultStartPoint();
   await loadStops();
   await loadKommoPipelines();
   await loadKommoFields();
@@ -293,8 +295,23 @@ function renderStopsList(stops) {
   });
 }
 
+// Trae el punto de partida por defecto (ej. la oficina) y lo cachea en
+// `defaultStartPoint`. Si no se pudo resolver la liga (Google no
+// respondio, o cambio de formato), simplemente no aparece como opcion.
+async function loadDefaultStartPoint() {
+  try {
+    const point = await api('/api/admin/default-start-point');
+    defaultStartPoint = point && point.lat != null ? point : null;
+  } catch (e) {
+    defaultStartPoint = null;
+    console.error('No se pudo cargar el punto de partida por defecto', e);
+  }
+}
+
 // Llena los selects de "punto de partida" / "punto final" con los clientes
-// que ya tienen ubicacion, sin perder lo que ya estaba elegido.
+// que ya tienen ubicacion, sin perder lo que ya estaba elegido. La primera
+// vez (sin nada elegido todavia), el punto de partida cae en el default
+// configurado (ej. la oficina) si esta disponible.
 function populateStartEndSelects(customers) {
   const options = customers
     .map((s) => `<option value="customer:${s.customer_id}">${s.name}</option>`)
@@ -302,12 +319,20 @@ function populateStartEndSelects(customers) {
 
   const startSelect = document.getElementById('startSelect');
   const prevStart = startSelect.value;
+  const defaultOption = defaultStartPoint
+    ? `<option value="default">${defaultStartPoint.label}</option>`
+    : '';
   startSelect.innerHTML = `
     <option value="driver">Ubicación actual del repartidor</option>
+    ${defaultOption}
     <option value="pin">📍 Elegir en el mapa</option>
     ${options}
   `;
-  if ([...startSelect.options].some((o) => o.value === prevStart)) startSelect.value = prevStart;
+  if (prevStart && [...startSelect.options].some((o) => o.value === prevStart)) {
+    startSelect.value = prevStart;
+  } else if (defaultStartPoint) {
+    startSelect.value = 'default';
+  }
 
   const endSelect = document.getElementById('endSelect');
   const prevEnd = endSelect.value;
@@ -354,6 +379,9 @@ function armPin(which) {
 
 // Resuelve el valor de un select de inicio/fin a {lat,lng}, o null si no aplica.
 function resolvePoint(selectValue, pin) {
+  if (selectValue === 'default') {
+    return defaultStartPoint ? { lat: defaultStartPoint.lat, lng: defaultStartPoint.lng } : null;
+  }
   if (selectValue === 'pin') {
     return pin ? { lat: pin.lat, lng: pin.lng } : null;
   }

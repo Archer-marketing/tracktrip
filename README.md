@@ -209,11 +209,20 @@ entregado nunca se toca.
    los repartidores en el mapa en tiempo real.
 3. Le das clic a "Sincronizar pedidos desde Kommo" para traer los pedidos
    nuevos.
-4. Marcas qué pedidos van con qué repartidor. Por defecto la ruta empieza
-   desde donde está el repartidor ahora mismo y termina donde sea más
-   corto — pero puedes cambiar eso con **"Punto de partida"** y **"Punto
-   final"**: elige un cliente ya cargado, o "Elegir en el mapa" y haz
-   clic donde quieras (por ejemplo, la bodega).
+4. Marcas qué pedidos van con qué repartidor. **"Punto de partida"** cae
+   por default en la oficina/bodega configurada (una liga de Google Maps
+   que se resuelve sola a coordenadas la primera vez que carga el panel,
+   y se cachea) — puedes cambiarlo por la ubicación actual del
+   repartidor, un cliente ya cargado, o "Elegir en el mapa". Lo mismo con
+   **"Punto final"** (opcional, sin default).
+
+   Para cambiar la oficina/bodega configurada:
+   ```bash
+   curl -X POST https://reparto.tuempresa.com/api/admin/default-start-point \
+     -H "Content-Type: application/json" \
+     -H "x-admin-password: TU_ADMIN_PASSWORD" \
+     -d '{"url":"https://maps.app.goo.gl/TU_LIGA", "label":"🏢 Bodega nueva"}'
+   ```
    Clic en **"🔍 Vista previa de ruta"** — el mapa te muestra el orden
    propuesto con números (1, 2, 3...) para que revises que tenga sentido
    antes de confirmar. Si te convence, dale **"✅ Confirmar y asignar"**.

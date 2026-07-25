@@ -13,6 +13,7 @@ const {
 } = require('../services/kommoService');
 const { optimizeRoute } = require('../services/routingService');
 const { createTrackingLinksForStops } = require('../services/trackingService');
+const { getDefaultStartPoint, setDefaultStartPoint } = require('../services/startPointService');
 
 const router = express.Router();
 
@@ -122,6 +123,23 @@ router.get('/kommo/invoice-field-config', (req, res) => {
 router.post('/kommo/invoice-field-config', (req, res) => {
   const { invoice_field_id } = req.body;
   setSyncInvoiceFieldConfig(invoice_field_id);
+  res.json({ ok: true });
+});
+
+// --- Punto de partida por defecto (ej. la oficina/bodega) ---
+router.get('/default-start-point', async (req, res) => {
+  try {
+    const point = await getDefaultStartPoint();
+    res.json(point || {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/default-start-point', (req, res) => {
+  const { url, label } = req.body;
+  if (!url) return res.status(400).json({ error: 'Falta la liga' });
+  setDefaultStartPoint(url, label);
   res.json({ ok: true });
 });
 

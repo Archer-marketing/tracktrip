@@ -75,4 +75,14 @@ try {
   db.exec(`ALTER TABLE customers ADD COLUMN invoice TEXT`);
 } catch (e) {}
 
+// Punto de partida por defecto para armar rutas (ej. la oficina/bodega).
+// Se deja precargado con esta liga solo la primera vez; si el admin la
+// cambia despues desde el panel, no se vuelve a pisar.
+const hasDefaultStart = db.prepare(`SELECT 1 FROM settings WHERE key = 'default_start_url'`).get();
+if (!hasDefaultStart) {
+  const seed = db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?)`);
+  seed.run('default_start_url', 'https://maps.app.goo.gl/oSd1ksT2SCvapnu9A');
+  seed.run('default_start_label', '🏢 Oficina');
+}
+
 module.exports = db;
