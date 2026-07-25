@@ -7,6 +7,7 @@ let startPin = null, endPin = null;
 let startPinMarker = null, endPinMarker = null;
 let previewMarkers = [], previewLine = null, previewOrder = null, previewDriverId = null;
 let previewStart = null, previewEnd = null;
+let previewStartMarker = null, previewEndMarker = null;
 let activeTab = 'pending'; // 'pending' o el id de un repartidor
 let defaultStartPoint = null;
 
@@ -516,6 +517,14 @@ function clearPreview() {
     map.removeLayer(previewLine);
     previewLine = null;
   }
+  if (previewStartMarker) {
+    map.removeLayer(previewStartMarker);
+    previewStartMarker = null;
+  }
+  if (previewEndMarker) {
+    map.removeLayer(previewEndMarker);
+    previewEndMarker = null;
+  }
   previewOrder = null;
   previewDriverId = null;
   previewStart = null;
@@ -565,6 +574,10 @@ async function previewRoute() {
 
 // Redibuja marcadores numerados + linea segun el orden actual de previewOrder
 // (ya sea recien calculado, o despues de moverlo a mano con las flechas).
+// El punto de partida/final SIEMPRE lleva su propio marcador, sea la
+// oficina, un cliente, el repartidor, o un pin elegido en el mapa - antes
+// solo se veia si elegias "Elegir en el mapa", y en los demas casos
+// (ej. la oficina) no aparecia nada.
 function redrawPreview() {
   previewMarkers.forEach((m) => map.removeLayer(m));
   previewMarkers = [];
@@ -572,9 +585,27 @@ function redrawPreview() {
     map.removeLayer(previewLine);
     previewLine = null;
   }
+  if (previewStartMarker) {
+    map.removeLayer(previewStartMarker);
+    previewStartMarker = null;
+  }
+  if (previewEndMarker) {
+    map.removeLayer(previewEndMarker);
+    previewEndMarker = null;
+  }
 
   const path = [];
-  if (previewStart) path.push([previewStart.lat, previewStart.lng]);
+  if (previewStart) {
+    path.push([previewStart.lat, previewStart.lng]);
+    previewStartMarker = L.marker([previewStart.lat, previewStart.lng], {
+      icon: L.divIcon({
+        html: '<div style="font-size:30px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚩</div>',
+        iconSize: [36, 36],
+        iconAnchor: [10, 32],
+        className: '',
+      }),
+    }).addTo(map).bindPopup('Punto de partida');
+  }
 
   previewOrder.forEach((s) => {
     const marker = L.marker([s.lat, s.lng], { icon: seqIcon(s.seq, '#111827') })
@@ -584,7 +615,17 @@ function redrawPreview() {
     path.push([s.lat, s.lng]);
   });
 
-  if (previewEnd) path.push([previewEnd.lat, previewEnd.lng]);
+  if (previewEnd) {
+    path.push([previewEnd.lat, previewEnd.lng]);
+    previewEndMarker = L.marker([previewEnd.lat, previewEnd.lng], {
+      icon: L.divIcon({
+        html: '<div style="font-size:30px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🏁</div>',
+        iconSize: [36, 36],
+        iconAnchor: [10, 32],
+        className: '',
+      }),
+    }).addTo(map).bindPopup('Punto final');
+  }
 
   if (path.length > 1) {
     previewLine = L.polyline(path, { color: '#111827', weight: 3, dashArray: '6,8' }).addTo(map);
