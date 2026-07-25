@@ -70,4 +70,9 @@ db.exec(
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_tracking_token ON customers(tracking_token)`
 );
 
+// Factura (texto o liga, tal cual venga del campo de Kommo configurado).
+try {
+  db.exec(`ALTER TABLE customers ADD COLUMN invoice TEXT`);
+} catch (e) {}
+
 module.exports = db;

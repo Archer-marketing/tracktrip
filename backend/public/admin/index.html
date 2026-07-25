@@ -33,6 +33,9 @@
   .mini-btn:disabled { opacity: 0.3; cursor: default; }
   .pass-gate { position: fixed; inset: 0; background: white; display: flex; align-items: center; justify-content: center; }
   .driver-tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: #dbeafe; color: #1e3a8a; margin-left: 6px; }
+  .tab-bar { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; }
+  .tab-btn { width: auto; white-space: nowrap; padding: 6px 12px; font-size: 12px; background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; border-radius: 999px; margin: 0; font-weight: 600; }
+  .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
 </style>
 </head>
 <body>
@@ -63,30 +66,37 @@
     <select id="fieldSelect" onchange="saveKommoFields(true)"></select>
     <button onclick="saveKommoFields()">💾 Guardar campo</button>
 
+    <h3>Kommo: campo de factura (opcional)</h3>
+    <select id="invoiceFieldSelect" onchange="saveInvoiceField(true)"></select>
+    <button onclick="saveInvoiceField()">💾 Guardar factura</button>
+
     <button onclick="syncKommo()">🔄 Sincronizar pedidos desde Kommo</button>
 
-    <h3>Pedidos (pendientes, en ruta y entregados hoy)</h3>
+    <h3>Pedidos</h3>
+    <div id="stopTabs" class="tab-bar"></div>
     <div id="stops"></div>
 
-    <select id="driverSelect" onchange="clearPreview()"></select>
+    <div id="assignControls">
+      <select id="driverSelect" onchange="clearPreview()"></select>
 
-    <h3>Punto de partida</h3>
-    <select id="startSelect" onchange="onStartSelectChange()">
-      <option value="driver">Ubicación actual del repartidor</option>
-      <option value="pin">📍 Elegir en el mapa</option>
-    </select>
-    <div id="startPinLabel" class="pin-label"></div>
+      <h3>Punto de partida</h3>
+      <select id="startSelect" onchange="onStartSelectChange()">
+        <option value="driver">Ubicación actual del repartidor</option>
+        <option value="pin">📍 Elegir en el mapa</option>
+      </select>
+      <div id="startPinLabel" class="pin-label"></div>
 
-    <h3>Punto final (opcional)</h3>
-    <select id="endSelect" onchange="onEndSelectChange()">
-      <option value="">(automático, sin punto fijo)</option>
-      <option value="pin">🏁 Elegir en el mapa</option>
-    </select>
-    <div id="endPinLabel" class="pin-label"></div>
+      <h3>Punto final (opcional)</h3>
+      <select id="endSelect" onchange="onEndSelectChange()">
+        <option value="">(automático, sin punto fijo)</option>
+        <option value="pin">🏁 Elegir en el mapa</option>
+      </select>
+      <div id="endPinLabel" class="pin-label"></div>
 
-    <button onclick="previewRoute()">🔍 Vista previa de ruta</button>
-    <div id="previewList"></div>
-    <button id="confirmRouteBtn" class="btn-confirm" onclick="confirmRoute()" style="display:none;">✅ Confirmar y asignar</button>
+      <button onclick="previewRoute()">🔍 Vista previa de ruta</button>
+      <div id="previewList"></div>
+      <button id="confirmRouteBtn" class="btn-confirm" onclick="confirmRoute()" style="display:none;">✅ Confirmar y asignar</button>
+    </div>
   </div>
 </div>
 

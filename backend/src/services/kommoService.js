@@ -96,6 +96,16 @@ function setSyncFieldConfig(fieldId) {
   setSetting('kommo_field_id', fieldId ? String(fieldId) : '');
 }
 
+// Campo opcional con la factura del pedido (liga o texto), para mostrarle
+// al repartidor junto con la parada.
+function getSyncInvoiceFieldConfig() {
+  return { invoice_field_id: getSetting('kommo_invoice_field_id') || '' };
+}
+
+function setSyncInvoiceFieldConfig(fieldId) {
+  setSetting('kommo_invoice_field_id', fieldId ? String(fieldId) : '');
+}
+
 function extractCustomField(lead, fieldId) {
   if (!fieldId) return null;
   const cf = (lead.custom_fields_values || []).find(
@@ -176,11 +186,11 @@ async function syncFromKommo() {
   const leads = data?._embedded?.leads || [];
 
   const insertCustomer = db.prepare(`
-    INSERT INTO customers (kommo_lead_id, name, address, lat, lng, phone)
-    VALUES (@kommo_lead_id, @name, @address, @lat, @lng, @phone)
+    INSERT INTO customers (kommo_lead_id, name, address, lat, lng, phone, invoice)
+    VALUES (@kommo_lead_id, @name, @address, @lat, @lng, @phone, @invoice)
     ON CONFLICT(kommo_lead_id) DO UPDATE SET
       name=excluded.name, address=excluded.address,
-      lat=excluded.lat, lng=excluded.lng, phone=excluded.phone
+      lat=excluded.lat, lng=excluded.lng, phone=excluded.phone, invoice=excluded.invoice
   `);
   const findCustomerId = db.prepare(`SELECT id FROM customers WHERE kommo_lead_id = ?`);
   const hasPendingStop = db.prepare(
@@ -192,6 +202,7 @@ async function syncFromKommo() {
 
   const results = { synced: 0, geocoded: 0, skipped: 0, removed: 0, errors: [] };
   const { field_id } = getSyncFieldConfig();
+  const { invoice_field_id } = getSyncInvoiceFieldConfig();
   const syncedLeadIds = new Set();
 
   for (const lead of leads) {
@@ -225,6 +236,7 @@ async function syncFromKommo() {
       }
 
       const phone = lead._embedded?.contacts?.[0]?.id ? '' : '';
+      const invoice = extractCustomField(lead, invoice_field_id);
 
       insertCustomer.run({
         kommo_lead_id: String(lead.id),
@@ -233,6 +245,7 @@ async function syncFromKommo() {
         lat,
         lng,
         phone,
+        invoice: invoice || null,
       });
 
       const customer = findCustomerId.get(String(lead.id));
@@ -276,5 +289,7 @@ module.exports = {
   getLeadCustomFields,
   getSyncFieldConfig,
   setSyncFieldConfig,
+  getSyncInvoiceFieldConfig,
+  setSyncInvoiceFieldConfig,
   updateLeadTrackingField,
 };

@@ -26,7 +26,7 @@ router.get('/next-stop/:driverId', (req, res) => {
   const { driverId } = req.params;
   const stop = db
     .prepare(
-      `SELECT s.id, c.name, c.address, c.lat, c.lng, s.sequence
+      `SELECT s.id, c.name, c.address, c.lat, c.lng, c.invoice, s.sequence
        FROM stops s JOIN customers c ON c.id = s.customer_id
        WHERE s.driver_id = ? AND s.status = 'assigned'
        ORDER BY s.sequence ASC LIMIT 1`
@@ -51,7 +51,7 @@ router.get('/route/:driverId', (req, res) => {
   const { driverId } = req.params;
   const stops = db
     .prepare(
-      `SELECT s.id, s.status, s.sequence, c.name, c.address, c.lat, c.lng
+      `SELECT s.id, s.status, s.sequence, c.name, c.address, c.lat, c.lng, c.invoice
        FROM stops s JOIN customers c ON c.id = s.customer_id
        WHERE s.driver_id = ?
          AND (s.status = 'assigned' OR (s.status = 'delivered' AND date(s.delivered_at) = date('now')))

@@ -8,6 +8,8 @@ const {
   getLeadCustomFields,
   getSyncFieldConfig,
   setSyncFieldConfig,
+  getSyncInvoiceFieldConfig,
+  setSyncInvoiceFieldConfig,
 } = require('../services/kommoService');
 const { optimizeRoute } = require('../services/routingService');
 const { createTrackingLinksForStops } = require('../services/trackingService');
@@ -109,6 +111,17 @@ router.post('/kommo/field-config', (req, res) => {
   const { field_id } = req.body;
   if (!field_id) return res.status(400).json({ error: 'Faltan datos' });
   setSyncFieldConfig(field_id);
+  res.json({ ok: true });
+});
+
+// --- Kommo: campo opcional con la factura, para mostrarsela al repartidor ---
+router.get('/kommo/invoice-field-config', (req, res) => {
+  res.json(getSyncInvoiceFieldConfig());
+});
+
+router.post('/kommo/invoice-field-config', (req, res) => {
+  const { invoice_field_id } = req.body;
+  setSyncInvoiceFieldConfig(invoice_field_id);
   res.json({ ok: true });
 });
 

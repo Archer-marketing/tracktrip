@@ -7,6 +7,7 @@ let startPin = null, endPin = null;
 let startPinMarker = null, endPinMarker = null;
 let previewMarkers = [], previewLine = null, previewOrder = null, previewDriverId = null;
 let previewStart = null, previewEnd = null;
+let activeTab = 'pending'; // 'pending' o el id de un repartidor
 
 function enter() {
   adminPass = document.getElementById('pass').value;
@@ -167,31 +168,113 @@ function seqIcon(num, color) {
 async function loadStops() {
   const stops = await api('/api/admin/stops');
   lastStops = stops;
+
+  renderStopTabs(stops);
+  renderStopsList(stops);
+
+  const pending = stops.filter((s) => s.status === 'pending');
+  populateStartEndSelects(pending.filter((s) => s.lat != null && s.lng != null));
+}
+
+// Una pestaña "Pendientes" (para armar rutas nuevas) + una por cada
+// repartidor que tenga algo asignado/entregado hoy, asi no se mezclan
+// las rutas de varios repartidores en una sola lista larga.
+function renderStopTabs(stops) {
+  const tabs = document.getElementById('stopTabs');
+  const pendingCount = stops.filter((s) => s.status === 'pending').length;
+
+  const driverIds = [...new Set(
+    stops.filter((s) => s.status !== 'pending').map((s) => s.driver_id)
+  )];
+
+  // Si el repartidor de la pestana activa ya no tiene nada, regresa a Pendientes.
+  if (activeTab !== 'pending' && !driverIds.some((id) => String(id) === String(activeTab))) {
+    activeTab = 'pending';
+  }
+
+  let html = `<button class="tab-btn ${activeTab === 'pending' ? 'active' : ''}" onclick="setActiveTab('pending')">📋 Pendientes (${pendingCount})</button>`;
+
+  driverIds.forEach((driverId) => {
+    const driver = driversById[String(driverId)];
+    const count = stops.filter((s) => s.driver_id === driverId && s.status === 'assigned').length;
+    const isActive = String(activeTab) === String(driverId);
+    html += `<button class="tab-btn ${isActive ? 'active' : ''}" onclick="setActiveTab(${driverId})">🚚 ${driver ? driver.name : 'Repartidor ' + driverId} (${count})</button>`;
+  });
+
+  tabs.innerHTML = html;
+}
+
+function setActiveTab(tab) {
+  activeTab = tab;
+  renderStopsList(lastStops);
+}
+
+// Dibuja la lista + los marcadores del mapa segun la pestana activa:
+// "pending" muestra los pendientes seleccionables (para armar una ruta);
+// un repartidor muestra solo su ruta (asignados + entregados hoy).
+function renderStopsList(stops) {
   const container = document.getElementById('stops');
   container.innerHTML = '';
 
   stopMarkers.forEach((m) => map.removeLayer(m));
   stopMarkers = [];
 
-  const pending = stops.filter((s) => s.status === 'pending');
-  const assigned = stops.filter((s) => s.status === 'assigned');
-  const delivered = stops.filter((s) => s.status === 'delivered');
+  document.getElementById('assignControls').style.display = activeTab === 'pending' ? 'block' : 'none';
 
-  // Pendientes: seleccionables para armar una ruta nueva.
-  pending.forEach((s) => {
-    const color = colorForCustomer(s.customer_id);
+  if (activeTab === 'pending') {
+    stops
+      .filter((s) => s.status === 'pending')
+      .forEach((s) => {
+        const color = colorForCustomer(s.customer_id);
+        const hasLocation = s.lat != null && s.lng != null;
+
+        const div = document.createElement('div');
+        div.className = 'stop' + (hasLocation ? '' : ' stop-missing');
+        div.innerHTML = `
+          <label>
+            <input type="checkbox" data-id="${s.id}" onchange="toggleStop(${s.id}, this.checked)" ${hasLocation ? '' : 'disabled'} />
+            <span class="stop-color" style="background:${color}"></span>
+            <span>
+              ${s.name}<br>
+              <small>${s.address || ''}</small><br>
+              ${hasLocation ? '' : '<small class="stop-warn">⚠️ Sin ubicación — corrige el lead en Kommo y vuelve a sincronizar</small><br>'}
+              ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
+            </span>
+          </label>
+        `;
+        container.appendChild(div);
+
+        if (hasLocation) {
+          const marker = L.marker([s.lat, s.lng], { icon: dotIcon(color, 16) }).addTo(map).bindPopup(s.name);
+          stopMarkers.push(marker);
+        }
+      });
+    return;
+  }
+
+  // Pestana de un repartidor: solo su ruta (asignados + entregados hoy).
+  const driver = driversById[String(activeTab)];
+  const driverStops = stops.filter((s) => String(s.driver_id) === String(activeTab));
+  const color = colorForDriver(activeTab);
+
+  if (!driverStops.length) {
+    container.innerHTML = '<div class="stop">Sin pedidos en esta ruta.</div>';
+    return;
+  }
+
+  driverStops.forEach((s) => {
     const hasLocation = s.lat != null && s.lng != null;
+    const done = s.status === 'delivered';
 
     const div = document.createElement('div');
-    div.className = 'stop' + (hasLocation ? '' : ' stop-missing');
+    div.className = 'stop ' + (done ? 'stop-delivered' : 'stop-assigned');
     div.innerHTML = `
       <label>
-        <input type="checkbox" data-id="${s.id}" onchange="toggleStop(${s.id}, this.checked)" ${hasLocation ? '' : 'disabled'} />
-        <span class="stop-color" style="background:${color}"></span>
+        <span class="stop-seq" style="background:${done ? '#16a34a' : color}">${done ? '✅' : s.sequence ?? '?'}</span>
         <span>
           ${s.name}<br>
+          <small>${done ? 'Entregado' : `Parada ${s.sequence ?? '?'}`}</small><br>
           <small>${s.address || ''}</small><br>
-          ${hasLocation ? '' : '<small class="stop-warn">⚠️ Sin ubicación — corrige el lead en Kommo y vuelve a sincronizar</small><br>'}
           ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
         </span>
       </label>
@@ -199,67 +282,15 @@ async function loadStops() {
     container.appendChild(div);
 
     if (hasLocation) {
-      const marker = L.marker([s.lat, s.lng], { icon: dotIcon(color, 16) }).addTo(map).bindPopup(s.name);
-      stopMarkers.push(marker);
-    }
-  });
-
-  // En ruta (ya asignados, todavia no entregados): numerados, color por repartidor.
-  assigned.forEach((s) => {
-    const driver = driversById[String(s.driver_id)];
-    const color = colorForDriver(s.driver_id);
-    const hasLocation = s.lat != null && s.lng != null;
-
-    const div = document.createElement('div');
-    div.className = 'stop stop-assigned';
-    div.innerHTML = `
-      <label>
-        <span class="stop-seq" style="background:${color}">${s.sequence ?? '?'}</span>
-        <span>
-          ${s.name}<br>
-          <small>Parada ${s.sequence ?? '?'} de ${driver ? driver.name : 'repartidor ' + s.driver_id}</small><br>
-          <small>${s.address || ''}</small><br>
-          ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
-        </span>
-      </label>
-    `;
-    container.appendChild(div);
-
-    if (hasLocation) {
-      const marker = L.marker([s.lat, s.lng], { icon: seqIcon(s.sequence ?? '?', color) })
+      const icon = done
+        ? L.divIcon({ html: '<div style="font-size:18px;opacity:.7">✅</div>', iconSize: [22, 22], className: '' })
+        : seqIcon(s.sequence ?? '?', color);
+      const marker = L.marker([s.lat, s.lng], { icon })
         .addTo(map)
-        .bindPopup(`Siguiente parada ${s.sequence} — ${s.name} (${driver ? driver.name : 'repartidor ' + s.driver_id})`);
+        .bindPopup(done ? `Entregado — ${s.name}` : `Siguiente parada ${s.sequence} — ${s.name} (${driver ? driver.name : 'repartidor ' + activeTab})`);
       stopMarkers.push(marker);
     }
   });
-
-  // Entregados hoy: informativo, atenuado.
-  delivered.forEach((s) => {
-    const driver = driversById[String(s.driver_id)];
-    const hasLocation = s.lat != null && s.lng != null;
-
-    const div = document.createElement('div');
-    div.className = 'stop stop-delivered';
-    div.innerHTML = `
-      <label>
-        <span>✅</span>
-        <span>
-          ${s.name}<br>
-          <small>Entregado por ${driver ? driver.name : 'repartidor ' + s.driver_id}</small>
-        </span>
-      </label>
-    `;
-    container.appendChild(div);
-
-    if (hasLocation) {
-      const marker = L.marker([s.lat, s.lng], {
-        icon: L.divIcon({ html: '<div style="font-size:18px;opacity:.7">✅</div>', iconSize: [22, 22], className: '' }),
-      }).addTo(map).bindPopup(`Entregado — ${s.name}`);
-      stopMarkers.push(marker);
-    }
-  });
-
-  populateStartEndSelects(pending.filter((s) => s.lat != null && s.lng != null));
 }
 
 // Llena los selects de "punto de partida" / "punto final" con los clientes
@@ -393,12 +424,17 @@ async function loadKommoFields() {
   try {
     const fields = await api('/api/admin/kommo/custom-fields');
     const current = await api('/api/admin/kommo/field-config');
+    const currentInvoice = await api('/api/admin/kommo/invoice-field-config');
 
     const options = fields.map((f) => `<option value="${f.id}">${f.name} (${f.type})</option>`).join('');
 
     const fieldSelect = document.getElementById('fieldSelect');
     fieldSelect.innerHTML = options;
     if (current.field_id) fieldSelect.value = current.field_id;
+
+    const invoiceSelect = document.getElementById('invoiceFieldSelect');
+    invoiceSelect.innerHTML = '<option value="">(sin factura)</option>' + options;
+    if (currentInvoice.invoice_field_id) invoiceSelect.value = currentInvoice.invoice_field_id;
   } catch (e) {
     console.error('No se pudieron cargar los campos de Kommo', e);
   }
@@ -415,6 +451,15 @@ async function saveKommoFields(silent) {
     body: JSON.stringify({ field_id }),
   });
   if (!silent) alert('Guardado. La proxima sincronizacion usara este campo.');
+}
+
+async function saveInvoiceField(silent) {
+  const invoice_field_id = document.getElementById('invoiceFieldSelect').value;
+  await api('/api/admin/kommo/invoice-field-config', {
+    method: 'POST',
+    body: JSON.stringify({ invoice_field_id }),
+  });
+  if (!silent) alert('Guardado. La proxima sincronizacion usara este campo para la factura.');
 }
 
 async function syncKommo() {
@@ -565,6 +610,7 @@ async function confirmRoute() {
   if (result.error) return alert(result.error);
   alert('Ruta asignada.');
   selectedStops.clear();
+  activeTab = previewDriverId; // salta directo a la pestana del repartidor recien asignado
   clearPreview();
   await loadStops();
 }

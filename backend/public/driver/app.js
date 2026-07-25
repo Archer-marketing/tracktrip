@@ -122,6 +122,16 @@ async function pollNextStop() {
   } catch (e) { /* red caida, se reintenta en el siguiente poll */ }
 }
 
+// La factura puede venir como liga (la mostramos como boton) o como texto
+// plano (numero de factura, etc.) - se muestra distinto segun el caso.
+function invoiceHtml(invoice) {
+  if (!invoice) return '';
+  if (/^https?:\/\//i.test(invoice)) {
+    return `<a class="invoice-btn" href="${invoice}" target="_blank">🧾 Ver factura</a>`;
+  }
+  return `<p class="invoice-text">🧾 Factura: ${invoice}</p>`;
+}
+
 function renderStop(stop, remaining) {
   const card = document.getElementById('stopCard');
   const remEl = document.getElementById('remaining');
@@ -134,6 +144,7 @@ function renderStop(stop, remaining) {
     <div class="card">
       <h2>${stop.name}</h2>
       <p>${stop.address || 'Sin dirección registrada'}</p>
+      ${invoiceHtml(stop.invoice)}
       <a class="maps-btn" style="display:block;text-align:center;text-decoration:none;color:white;border-radius:10px;padding:16px;font-weight:600;" href="${stop.mapsUrl}" target="_blank">📍 Abrir en Google Maps</a>
       <button class="done-btn" onclick="completeStop(${stop.id})">✅ Marcar como entregado</button>
     </div>
@@ -184,13 +195,16 @@ function renderRouteList(stops) {
   list.innerHTML = stops
     .map((s) => {
       const done = s.status === 'delivered';
+      const invoiceIsLink = s.invoice && /^https?:\/\//i.test(s.invoice);
       return `
         <div class="route-item ${done ? 'done' : ''}">
           <span class="route-seq">${done ? '✅' : s.sequence}</span>
           <span class="route-info">
             <b>${s.name}</b><br>
             <small>${s.address || ''}</small>
+            ${s.invoice && !invoiceIsLink ? `<br><small>🧾 ${s.invoice}</small>` : ''}
           </span>
+          ${invoiceIsLink ? `<a class="route-link" href="${s.invoice}" target="_blank">🧾</a>` : ''}
           <a class="route-link" href="${s.mapsUrl}" target="_blank">📍</a>
         </div>
       `;

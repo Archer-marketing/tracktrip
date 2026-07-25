@@ -184,6 +184,11 @@ pm2 startup
      o `"lat,lng"` plano — el sistema detecta automáticamente cuál es y
      saca las coordenadas (o geocodifica si es texto de dirección). Se
      guarda solo al elegirlo, no hace falta darle a ningún botón.
+   - **"Kommo: campo de factura (opcional)"** — si tienes un campo con la
+     factura del pedido (una liga a un PDF/imagen, o solo un número de
+     factura en texto), elígelo aquí. Se le va a mostrar al repartidor
+     junto con esa parada — como botón "🧾 Ver factura" si es una liga,
+     o como texto si no.
 
 Cada clic en "Sincronizar pedidos desde Kommo" en el panel trae los leads,
 geocodifica la dirección (si no tienes lat/lng directo) y los agrega como
@@ -212,9 +217,12 @@ entregado nunca se toca.
    Clic en **"🔍 Vista previa de ruta"** — el mapa te muestra el orden
    propuesto con números (1, 2, 3...) para que revises que tenga sentido
    antes de confirmar. Si te convence, dale **"✅ Confirmar y asignar"**.
-   Mientras un pedido está en ruta (asignado, sin entregar) se ve en el
-   mapa/lista con su número de parada y el color del repartidor; los
-   entregados el día de hoy aparecen marcados con ✅.
+   En cuanto confirmas, se abre una **pestaña nueva con el nombre de ese
+   repartidor** arriba de la lista de pedidos — ahí ves solo su ruta
+   (numerada, con el color de ese repartidor), separada de las de los
+   demás. La pestaña "📋 Pendientes" sigue siendo donde seleccionas
+   pedidos para armar la siguiente ruta. Los entregados el día de hoy
+   aparecen marcados con ✅ dentro de la pestaña de su repartidor.
 5. Al repartidor le aparece automáticamente "tu siguiente parada" con
    botón directo a Google Maps. Cuando entrega, toca "Marcar como
    entregado" y le aparece la siguiente. Si quiere ver todo su recorrido
