@@ -25,6 +25,9 @@ router.post('/location', (req, res) => {
 
 router.get('/next-stop/:driverId', (req, res) => {
   const { driverId } = req.params;
+  const driver = db.prepare('SELECT route_started FROM drivers WHERE id = ?').get(driverId);
+  const routeStarted = !!(driver && driver.route_started);
+
   const stop = db
     .prepare(
       `SELECT s.id, c.name, c.address, c.lat, c.lng, c.invoice, s.sequence
@@ -34,7 +37,7 @@ router.get('/next-stop/:driverId', (req, res) => {
     )
     .get(driverId);
 
-  if (!stop) return res.json({ stop: null });
+  if (!stop) return res.json({ stop: null, routeStarted });
 
   const remaining = db
     .prepare(`SELECT COUNT(*) as n FROM stops WHERE driver_id = ? AND status = 'assigned'`)
@@ -42,7 +45,21 @@ router.get('/next-stop/:driverId', (req, res) => {
 
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving`;
 
-  res.json({ stop: { ...stop, mapsUrl }, remaining });
+  res.json({ stop: { ...stop, mapsUrl }, remaining, routeStarted });
+});
+
+// El repartidor toca "Iniciar ruta" en su pantalla; hasta entonces no se
+// dispara ninguna alerta de Kommo para su ruta actual. Al tocarlo, revisa
+// de una vez si ya toca avisar algo (ej. si ya arrancaba a 0 o 3 de una).
+router.post('/start-route', (req, res) => {
+  const { driver_id } = req.body;
+  if (!driver_id) return res.status(400).json({ error: 'Faltan datos' });
+  db.prepare('UPDATE drivers SET route_started = 1 WHERE id = ?').run(driver_id);
+  res.json({ ok: true });
+
+  checkBotTriggersForDriver(driver_id).catch((err) => {
+    console.error('Error revisando salesbots al iniciar ruta:', err.message);
+  });
 });
 
 // Ruta completa del repartidor (pendientes + entregados hoy, en orden),

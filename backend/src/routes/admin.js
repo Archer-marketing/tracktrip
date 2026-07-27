@@ -144,22 +144,14 @@ router.post('/default-start-point', (req, res) => {
   res.json({ ok: true });
 });
 
-// Activa/desactiva las alertas (salesbots) para un cliente/pedido en
-// particular - no es un interruptor general, cada quien tiene el suyo.
-router.post('/customers/:id/alerts', (req, res) => {
-  const { id } = req.params;
-  const { enabled } = req.body;
-  db.prepare('UPDATE customers SET alerts_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
-  res.json({ ok: true });
-});
-
 // --- Customers / stops (pendientes + asignados + entregados hoy, para ver
 // en el mapa quien va, quien falta y quien ya entrego) ---
 router.get('/stops', (req, res) => {
   const stops = db
     .prepare(
       `SELECT s.id, s.status, s.sequence, s.driver_id, s.delivered_at,
-              c.id as customer_id, c.name, c.address, c.lat, c.lng, c.kommo_lead_id, c.alerts_enabled
+              s.notified_3_away, s.notified_next,
+              c.id as customer_id, c.name, c.address, c.lat, c.lng, c.kommo_lead_id
        FROM stops s JOIN customers c ON c.id = s.customer_id
        WHERE s.status != 'delivered' OR date(s.delivered_at) = date('now')
        ORDER BY s.driver_id, s.sequence`
@@ -248,6 +240,9 @@ router.post('/assign-route', (req, res) => {
   );
   const tx = db.transaction((ids) => {
     ids.forEach((id, idx) => update.run(driver_id, idx + 1, id));
+    // Ruta nueva/actualizada: el repartidor tiene que volver a tocar
+    // "Iniciar ruta" antes de que se dispare cualquier alerta.
+    db.prepare('UPDATE drivers SET route_started = 0 WHERE id = ?').run(driver_id);
   });
   tx(ordered_stop_ids);
 
@@ -311,13 +306,15 @@ router.post('/stops/:id/move', (req, res) => {
   res.json({ ok: true });
 });
 
-// Quita un pedido de la ruta (regresa a Pendientes para reasignarlo).
+// Quita un pedido de la ruta (regresa a Pendientes para reasignarlo). No se
+// tocan notified_3_away/notified_next: una alerta ya mandada (o apagada a
+// mano) se queda asi aunque el pedido se reasigne despues - si el admin
+// quiere que vuelva a avisar, la reactiva el mismo con su checkbox.
 router.post('/stops/:id/unassign', (req, res) => {
   const { id } = req.params;
   const info = db
     .prepare(
-      `UPDATE stops SET driver_id = NULL, sequence = NULL, status = 'pending', assigned_at = NULL,
-       notified_3_away = 0, notified_next = 0
+      `UPDATE stops SET driver_id = NULL, sequence = NULL, status = 'pending', assigned_at = NULL
        WHERE id = ? AND status = 'assigned'`
     )
     .run(id);
@@ -326,17 +323,42 @@ router.post('/stops/:id/unassign', (req, res) => {
 });
 
 // Termina la ruta de un repartidor: todo lo que le quedaba sin entregar
-// regresa a Pendientes (nada se borra ni se marca como entregado a la fuerza).
+// regresa a Pendientes (nada se borra ni se marca como entregado a la
+// fuerza). Igual que unassign, no toca las alertas ya mandadas.
 router.post('/drivers/:id/finish-route', (req, res) => {
   const { id } = req.params;
   const info = db
     .prepare(
-      `UPDATE stops SET driver_id = NULL, sequence = NULL, status = 'pending', assigned_at = NULL,
-       notified_3_away = 0, notified_next = 0
+      `UPDATE stops SET driver_id = NULL, sequence = NULL, status = 'pending', assigned_at = NULL
        WHERE driver_id = ? AND status = 'assigned'`
     )
     .run(id);
   res.json({ ok: true, returned: info.changes });
+});
+
+// Activa/apaga una alerta especifica ("3_away" o "next") de un pedido.
+// Apagarla la deja marcada como si ya se hubiera mandado (no se repite).
+// Prenderla la vuelve a armar y revisa al toque si ya toca dispararla.
+router.post('/stops/:id/alert', (req, res) => {
+  const { id } = req.params;
+  const { type, armed } = req.body; // type: '3_away' | 'next'
+  if (type !== '3_away' && type !== 'next') {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
+  const column = type === 'next' ? 'notified_next' : 'notified_3_away';
+
+  const stop = db.prepare('SELECT driver_id FROM stops WHERE id = ?').get(id);
+  if (!stop) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+  db.prepare(`UPDATE stops SET ${column} = ? WHERE id = ?`).run(armed ? 0 : 1, id);
+
+  if (armed && stop.driver_id) {
+    checkBotTriggersForDriver(stop.driver_id).catch((err) => {
+      console.error('Error revisando salesbots tras reactivar alerta:', err.message);
+    });
+  }
+
+  res.json({ ok: true });
 });
 
 module.exports = router;

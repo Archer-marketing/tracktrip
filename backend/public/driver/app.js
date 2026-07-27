@@ -123,8 +123,26 @@ async function pollNextStop() {
     const res = await fetch(`/api/driver/next-stop/${driverId}`);
     const data = await res.json();
     renderStop(data.stop, data.remaining);
+    renderStartRouteBanner(data.stop, data.routeStarted);
     if (routeVisible) loadRouteView();
   } catch (e) { /* red caida, se reintenta en el siguiente poll */ }
+}
+
+// Mientras no toque "Iniciar ruta", no se manda ninguna alerta de Kommo
+// para su ruta (el backend la bloquea) - esto solo es el aviso/boton, el
+// repartidor puede seguir viendo/entregando pedidos normal mientras tanto.
+function renderStartRouteBanner(stop, routeStarted) {
+  const banner = document.getElementById('startRouteBanner');
+  banner.style.display = stop && !routeStarted ? 'block' : 'none';
+}
+
+async function startRoute() {
+  await fetch('/api/driver/start-route', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ driver_id: driverId }),
+  });
+  pollNextStop();
 }
 
 // La factura puede venir como liga (la mostramos como boton) o como texto

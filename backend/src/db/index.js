@@ -84,10 +84,19 @@ try {
   db.exec(`ALTER TABLE stops ADD COLUMN notified_next INTEGER DEFAULT 0`);
 } catch (e) {}
 
-// Interruptor de alertas (salesbots) por cliente/pedido, no general.
-// DEFAULT 1 tambien rellena las filas existentes al agregar la columna.
+// Interruptor de alertas por cliente/pedido - ya no se usa (se reemplazo
+// por notified_3_away/notified_next expuestos como checkbox por alerta),
+// se deja la columna por compatibilidad con datos viejos pero el codigo
+// no la lee.
 try {
   db.exec(`ALTER TABLE customers ADD COLUMN alerts_enabled INTEGER DEFAULT 1`);
+} catch (e) {}
+
+// Repartidor tiene que tocar "Iniciar ruta" en su pantalla antes de que se
+// dispare cualquier alerta de Kommo para su ruta actual. Se resetea a 0
+// cada vez que se le confirma una ruta nueva (assign-route).
+try {
+  db.exec(`ALTER TABLE drivers ADD COLUMN route_started INTEGER DEFAULT 0`);
 } catch (e) {}
 
 // Punto de partida por defecto para armar rutas (ej. la oficina/bodega).

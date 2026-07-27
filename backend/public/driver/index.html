@@ -33,6 +33,8 @@
   .card p { margin: 4px 0; color: #cbd5e1; }
   .maps-btn { background: #16a34a; margin-top: 12px; }
   .done-btn { background: #64748b; margin-top: 8px; }
+  .start-route-btn { background: #7c3aed; font-size: 18px; padding: 18px; animation: pulse-start 1.8s ease-in-out infinite; }
+  @keyframes pulse-start { 0%, 100% { opacity: 1; } 50% { opacity: 0.75; } }
   .invoice-btn { display: block; text-align: center; text-decoration: none; color: white; background: #7c3aed; border-radius: 10px; padding: 12px; font-weight: 600; margin-top: 8px; }
   .invoice-text { font-size: 13px; }
   .remaining { font-size: 13px; color: #94a3b8; text-align: center; }
@@ -62,6 +64,9 @@
   </div>
 
   <div id="app">
+    <div id="startRouteBanner" style="display:none;">
+      <button class="start-route-btn" onclick="startRoute()">🚀 Iniciar ruta</button>
+    </div>
     <div id="stopCard"></div>
     <div class="remaining" id="remaining"></div>
 

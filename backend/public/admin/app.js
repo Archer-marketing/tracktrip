@@ -215,17 +215,26 @@ function setActiveTab(tab) {
 // Dibuja la lista + los marcadores del mapa segun la pestana activa:
 // "pending" muestra los pendientes seleccionables (para armar una ruta);
 // un repartidor muestra solo su ruta (asignados + entregados hoy).
-// Checkbox de alertas (salesbots) de este cliente en particular - no es un
-// interruptor general, cada pedido tiene el suyo. Se pone FUERA del
-// <label> del pedido (no anidado) porque un <label> dentro de otro
-// <label> es invalido en HTML y se comporta raro al hacer click.
-function alertsCheckboxHtml(s) {
-  const checked = s.alerts_enabled !== 0;
+// Un checkbox por cada alerta (no una sola "alertas" general): "marcado"
+// significa que esa alerta todavia esta armada (no se ha mandado, o se
+// volvio a activar a mano); en cuanto se dispara, se desmarca sola y se
+// queda asi para siempre (no se repite) salvo que el admin la reactive
+// aqui mismo. Se ponen FUERA del <label> del pedido (no anidados) porque
+// un <label> dentro de otro <label> es invalido en HTML.
+function alertCheckboxesHtml(s) {
+  const armed3Away = !s.notified_3_away;
+  const armedNext = !s.notified_next;
   return `
-    <label class="stop-alerts-label">
-      <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleCustomerAlerts(${s.customer_id}, this.checked)" />
-      📣 Alertas
-    </label>
+    <div class="stop-alerts">
+      <label class="stop-alerts-label">
+        <input type="checkbox" ${armed3Away ? 'checked' : ''} onchange="toggleAlert(${s.id}, '3_away', this.checked)" />
+        🔔 Faltan 3
+      </label>
+      <label class="stop-alerts-label">
+        <input type="checkbox" ${armedNext ? 'checked' : ''} onchange="toggleAlert(${s.id}, 'next', this.checked)" />
+        🔔 Es el siguiente
+      </label>
+    </div>
   `;
 }
 
@@ -239,13 +248,21 @@ function renderStopsList(stops) {
   document.getElementById('assignControls').style.display = activeTab === 'pending' ? 'block' : 'none';
 
   const routeActions = document.getElementById('routeActions');
-  const activeAssignedCount =
-    activeTab !== 'pending'
-      ? stops.filter((s) => String(s.driver_id) === String(activeTab) && s.status === 'assigned').length
-      : 0;
-  routeActions.innerHTML = activeAssignedCount
-    ? `<button class="btn-danger" onclick="finishRoute(${activeTab})">✅ Marcar ruta como terminada</button>`
-    : '';
+  if (activeTab === 'pending') {
+    const selectableCount = stops.filter(
+      (s) => s.status === 'pending' && s.lat != null && s.lng != null
+    ).length;
+    routeActions.innerHTML = selectableCount
+      ? `<button onclick="toggleSelectAllPending()">☑️ Seleccionar/deseleccionar todos</button>`
+      : '';
+  } else {
+    const activeAssignedCount = stops.filter(
+      (s) => String(s.driver_id) === String(activeTab) && s.status === 'assigned'
+    ).length;
+    routeActions.innerHTML = activeAssignedCount
+      ? `<button class="btn-danger" onclick="finishRoute(${activeTab})">✅ Marcar ruta como terminada</button>`
+      : '';
+  }
 
   if (activeTab === 'pending') {
     stops
@@ -258,7 +275,7 @@ function renderStopsList(stops) {
         div.className = 'stop' + (hasLocation ? '' : ' stop-missing');
         div.innerHTML = `
           <label>
-            <input type="checkbox" data-id="${s.id}" onchange="toggleStop(${s.id}, this.checked)" ${hasLocation ? '' : 'disabled'} />
+            <input type="checkbox" data-id="${s.id}" onchange="toggleStop(${s.id}, this.checked)" ${selectedStops.has(s.id) ? 'checked' : ''} ${hasLocation ? '' : 'disabled'} />
             <span class="stop-color" style="background:${color}"></span>
             <span>
               ${s.name}<br>
@@ -267,7 +284,6 @@ function renderStopsList(stops) {
               ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
             </span>
           </label>
-          ${alertsCheckboxHtml(s)}
         `;
         container.appendChild(div);
 
@@ -323,7 +339,7 @@ function renderStopsList(stops) {
         </span>
         ${actionsHtml}
       </label>
-      ${done ? '' : alertsCheckboxHtml(s)}
+      ${done ? '' : alertCheckboxesHtml(s)}
     `;
     container.appendChild(div);
 
@@ -443,6 +459,22 @@ function toggleStop(id, checked) {
   else selectedStops.delete(id);
 }
 
+// Selecciona/deselecciona de un click todos los pendientes con ubicacion
+// (los que no tienen no se pueden elegir de todas formas). Si ya estaban
+// todos seleccionados, el mismo boton los deselecciona.
+function toggleSelectAllPending() {
+  const selectable = lastStops.filter((s) => s.status === 'pending' && s.lat != null && s.lng != null);
+  const allSelected = selectable.length > 0 && selectable.every((s) => selectedStops.has(s.id));
+
+  clearPreview();
+  if (allSelected) {
+    selectable.forEach((s) => selectedStops.delete(s.id));
+  } else {
+    selectable.forEach((s) => selectedStops.add(s.id));
+  }
+  renderStopsList(lastStops);
+}
+
 // --- Editar una ruta ya confirmada (pestana de un repartidor) ---
 
 async function moveStop(stopId, direction) {
@@ -560,15 +592,14 @@ async function saveInvoiceField(silent) {
   if (!silent) alert('Guardado. La proxima sincronizacion usara este campo para la factura.');
 }
 
-// Alertas (salesbots 103880/103878) por cliente/pedido, no general. Se
-// guarda al instante (sin recargar la lista, para no perder el scroll);
-// si se desmarca no se dispara nada para ese cliente pero tampoco se
-// marca como "ya notificado" - si se vuelve a activar despues sigue
-// avisando normal.
-async function toggleCustomerAlerts(customerId, enabled) {
-  await api(`/api/admin/customers/${customerId}/alerts`, {
+// Una alerta especifica ("3_away" o "next") de un pedido. Desmarcarla la
+// deja como "ya mandada" (no se repite); marcarla la vuelve a armar y el
+// servidor revisa al toque si ya toca dispararla. No se recarga la lista
+// entera para no perder el scroll ni el resto de checkboxes marcados.
+async function toggleAlert(stopId, type, armed) {
+  await api(`/api/admin/stops/${stopId}/alert`, {
     method: 'POST',
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ type, armed }),
   });
 }
 

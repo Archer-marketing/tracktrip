@@ -211,7 +211,11 @@ entregado nunca se toca.
    los repartidores en el mapa en tiempo real.
 3. Le das clic a "Sincronizar pedidos desde Kommo" para traer los pedidos
    nuevos.
-4. Marcas qué pedidos van con qué repartidor. **"Punto de partida"** cae
+4. En "📋 Pendientes" hay un botón **"☑️ Seleccionar/deseleccionar
+   todos"** por si quieres armar una ruta con todo lo que hay (solo
+   selecciona los que tienen ubicación válida).
+
+   Marcas qué pedidos van con qué repartidor. **"Punto de partida"** cae
    por default en la oficina/bodega configurada (una liga de Google Maps
    que se resuelve sola a coordenadas la primera vez que carga el panel,
    y se cachea) — puedes cambiarlo por la ubicación actual del
@@ -249,6 +253,13 @@ entregado nunca se toca.
    puede tocar "🗺️ Ver ruta completa" — mapa y lista con todas sus
    paradas del día, marcando cuáles ya entregó, y con su propia
    ubicación en tiempo real (🚚) para orientarse respecto a las paradas.
+
+   Si tiene pedidos asignados y todavía no le da a nada, le aparece un
+   botón morado **"🚀 Iniciar ruta"**. Puede ver/entregar pedidos sin
+   tocarlo, pero **ninguna alerta de Kommo se dispara hasta que lo
+   toque** — es la señal de "ya salí a repartir". En cuanto lo toca, se
+   revisan de una vez las alertas que ya le tocaban (por si arrancaba
+   con alguien a 3 pedidos o menos).
 6. Al confirmar la ruta (paso 4), cada pedido recién asignado recibe una
    **liga pública de rastreo** (`https://tudominio.com/track/<token>`),
    única por pedido y válida 24 horas. Ahí el cliente ve el mapa con su
@@ -267,11 +278,14 @@ entregado nunca se toca.
    pasan por la misma cola con límite de tasa (máximo ~6
    solicitudes/segundo a Kommo, con margen sobre su límite de 7).
 
-   Cada pedido (en "Pendientes" o dentro de la ruta de un repartidor)
-   tiene su propio checkbox **"📣 Alertas"** — no es un interruptor
-   general, es por cliente. Desmarcado, no se le dispara ningún bot a
-   ese pedido en particular (pero tampoco se marca como "ya avisado",
-   así que si lo vuelves a marcar después, sigue avisando normal).
+   Dentro de la ruta de un repartidor, cada pedido tiene **dos
+   checkboxes separados**: **"🔔 Faltan 3"** y **"🔔 Es el siguiente"**
+   (una por cada alerta, no una sola general). Marcado significa "esta
+   armada, se va a mandar cuando toque"; en cuanto se dispara, se
+   desmarca sola y **se queda así para siempre** — no se vuelve a
+   mandar esa alerta a ese pedido aunque lo reasignes o edites la ruta
+   varias veces, salvo que tú mismo la vuelvas a marcar (ahí se revisa
+   al toque si ya toca dispararla).
 
 ## Limitación importante sobre "segundo plano"
 Ningún navegador (Chrome, Safari) garantiza mandar ubicación si el
