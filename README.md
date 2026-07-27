@@ -234,6 +234,14 @@ entregado nunca se toca.
    demás. La pestaña "📋 Pendientes" sigue siendo donde seleccionas
    pedidos para armar la siguiente ruta. Los entregados el día de hoy
    aparecen marcados con ✅ dentro de la pestaña de su repartidor.
+
+   Dentro de la pestaña de un repartidor, cada pedido sin entregar
+   todavía tiene botones **▲▼** (para reordenarlo dentro de esa misma
+   ruta) y **✖** (para quitarlo — regresa a "Pendientes" para
+   reasignarlo). Arriba de la lista hay un botón **"✅ Marcar ruta como
+   terminada"**: lo que le haya quedado sin entregar a ese repartidor
+   regresa también a "Pendientes" (nada se borra ni se marca como
+   entregado a la fuerza).
 5. Al repartidor le aparece automáticamente "tu siguiente parada" con
    botón directo a Google Maps. Cuando entrega, toca "Marcar como
    entregado" y le aparece la siguiente. Si quiere ver todo su recorrido

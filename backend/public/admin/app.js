@@ -224,6 +224,15 @@ function renderStopsList(stops) {
 
   document.getElementById('assignControls').style.display = activeTab === 'pending' ? 'block' : 'none';
 
+  const routeActions = document.getElementById('routeActions');
+  const activeAssignedCount =
+    activeTab !== 'pending'
+      ? stops.filter((s) => String(s.driver_id) === String(activeTab) && s.status === 'assigned').length
+      : 0;
+  routeActions.innerHTML = activeAssignedCount
+    ? `<button class="btn-danger" onclick="finishRoute(${activeTab})">✅ Marcar ruta como terminada</button>`
+    : '';
+
   if (activeTab === 'pending') {
     stops
       .filter((s) => s.status === 'pending')
@@ -269,6 +278,23 @@ function renderStopsList(stops) {
     const hasLocation = s.lat != null && s.lng != null;
     const done = s.status === 'delivered';
 
+    // Solo se puede reordenar/quitar entre pedidos todavia sin entregar,
+    // asi que los limites de "subir"/"bajar" se calculan solo entre esos.
+    const assignedNeighbors = driverStops.filter((x) => x.status === 'assigned');
+    const posAmongAssigned = assignedNeighbors.findIndex((x) => x.id === s.id);
+    const isFirst = posAmongAssigned <= 0;
+    const isLast = posAmongAssigned === assignedNeighbors.length - 1;
+
+    const actionsHtml = done
+      ? ''
+      : `
+        <span class="stop-actions">
+          <button class="mini-btn" onclick="moveStop(${s.id}, 'up')" ${isFirst ? 'disabled' : ''}>▲</button>
+          <button class="mini-btn" onclick="moveStop(${s.id}, 'down')" ${isLast ? 'disabled' : ''}>▼</button>
+          <button class="mini-btn remove" onclick="unassignStop(${s.id})">✖</button>
+        </span>
+      `;
+
     const div = document.createElement('div');
     div.className = 'stop ' + (done ? 'stop-delivered' : 'stop-assigned');
     div.innerHTML = `
@@ -280,6 +306,7 @@ function renderStopsList(stops) {
           <small>${s.address || ''}</small><br>
           ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
         </span>
+        ${actionsHtml}
       </label>
     `;
     container.appendChild(div);
@@ -398,6 +425,32 @@ function toggleStop(id, checked) {
   clearPreview();
   if (checked) selectedStops.add(id);
   else selectedStops.delete(id);
+}
+
+// --- Editar una ruta ya confirmada (pestana de un repartidor) ---
+
+async function moveStop(stopId, direction) {
+  const result = await api(`/api/admin/stops/${stopId}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ direction }),
+  });
+  if (result.error) return alert(result.error);
+  await loadStops();
+}
+
+async function unassignStop(stopId) {
+  if (!confirm('¿Quitar este pedido de la ruta? Regresa a "Pendientes" para reasignarlo.')) return;
+  const result = await api(`/api/admin/stops/${stopId}/unassign`, { method: 'POST' });
+  if (result.error) return alert(result.error);
+  await loadStops();
+}
+
+async function finishRoute(driverId) {
+  if (!confirm('¿Marcar esta ruta como terminada? Los pedidos que sigan sin entregar regresan a "Pendientes".')) return;
+  const result = await api(`/api/admin/drivers/${driverId}/finish-route`, { method: 'POST' });
+  if (result.error) return alert(result.error);
+  activeTab = 'pending';
+  await loadStops();
 }
 
 let kommoPipelines = [];

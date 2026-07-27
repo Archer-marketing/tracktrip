@@ -32,6 +32,13 @@
   .preview-item span.name { flex: 1; }
   .mini-btn { width: auto; padding: 2px 8px; margin: 0; font-size: 14px; }
   .mini-btn:disabled { opacity: 0.3; cursor: default; }
+  .btn-danger { background: #dc2626; }
+  .btn-danger:hover { background: #b91c1c; }
+  .stop-actions { display: flex; gap: 4px; margin-left: auto; align-self: flex-start; }
+  .stop-actions .mini-btn { background: #e2e8f0; color: #334155; }
+  .stop-actions .mini-btn:hover { background: #cbd5e1; }
+  .stop-actions .mini-btn.remove { background: #fee2e2; color: #b91c1c; }
+  .stop-actions .mini-btn.remove:hover { background: #fecaca; }
   .pass-gate { position: fixed; inset: 0; background: white; display: flex; align-items: center; justify-content: center; }
   .driver-tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: #dbeafe; color: #1e3a8a; margin-left: 6px; }
   .tab-bar { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; }
@@ -86,6 +93,7 @@
 
     <h3>Pedidos</h3>
     <div id="stopTabs" class="tab-bar"></div>
+    <div id="routeActions"></div>
     <div id="stops"></div>
 
     <div id="assignControls">

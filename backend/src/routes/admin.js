@@ -257,4 +257,77 @@ router.post('/assign-route', (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Editar una ruta ya confirmada ---
+
+// Sube/baja un pedido dentro de la ruta de su repartidor (intercambia el
+// "sequence" con el vecino de arriba/abajo). Como el orden cambia, se
+// revisan de nuevo los salesbots de "faltan 3" / "eres el siguiente".
+router.post('/stops/:id/move', (req, res) => {
+  const { id } = req.params;
+  const { direction } = req.body; // 'up' | 'down'
+  if (direction !== 'up' && direction !== 'down') {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
+
+  const stop = db
+    .prepare(`SELECT id, driver_id, sequence FROM stops WHERE id = ? AND status = 'assigned'`)
+    .get(id);
+  if (!stop) return res.status(404).json({ error: 'Pedido no encontrado o ya no esta en ruta' });
+
+  const neighbor =
+    direction === 'up'
+      ? db
+          .prepare(
+            `SELECT id, sequence FROM stops WHERE driver_id = ? AND status = 'assigned' AND sequence < ? ORDER BY sequence DESC LIMIT 1`
+          )
+          .get(stop.driver_id, stop.sequence)
+      : db
+          .prepare(
+            `SELECT id, sequence FROM stops WHERE driver_id = ? AND status = 'assigned' AND sequence > ? ORDER BY sequence ASC LIMIT 1`
+          )
+          .get(stop.driver_id, stop.sequence);
+
+  if (!neighbor) return res.json({ ok: true }); // ya esta en el extremo, no hay nada que mover
+
+  const update = db.prepare('UPDATE stops SET sequence = ? WHERE id = ?');
+  db.transaction(() => {
+    update.run(neighbor.sequence, stop.id);
+    update.run(stop.sequence, neighbor.id);
+  })();
+
+  checkBotTriggersForDriver(stop.driver_id).catch((err) => {
+    console.error('Error revisando salesbots tras reordenar:', err.message);
+  });
+
+  res.json({ ok: true });
+});
+
+// Quita un pedido de la ruta (regresa a Pendientes para reasignarlo).
+router.post('/stops/:id/unassign', (req, res) => {
+  const { id } = req.params;
+  const info = db
+    .prepare(
+      `UPDATE stops SET driver_id = NULL, sequence = NULL, status = 'pending', assigned_at = NULL,
+       notified_3_away = 0, notified_next = 0
+       WHERE id = ? AND status = 'assigned'`
+    )
+    .run(id);
+  if (!info.changes) return res.status(404).json({ error: 'Pedido no encontrado o ya no esta en ruta' });
+  res.json({ ok: true });
+});
+
+// Termina la ruta de un repartidor: todo lo que le quedaba sin entregar
+// regresa a Pendientes (nada se borra ni se marca como entregado a la fuerza).
+router.post('/drivers/:id/finish-route', (req, res) => {
+  const { id } = req.params;
+  const info = db
+    .prepare(
+      `UPDATE stops SET driver_id = NULL, sequence = NULL, status = 'pending', assigned_at = NULL,
+       notified_3_away = 0, notified_next = 0
+       WHERE driver_id = ? AND status = 'assigned'`
+    )
+    .run(id);
+  res.json({ ok: true, returned: info.changes });
+});
+
 module.exports = router;
