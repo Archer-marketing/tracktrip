@@ -267,11 +267,11 @@ entregado nunca se toca.
    pasan por la misma cola con límite de tasa (máximo ~6
    solicitudes/segundo a Kommo, con margen sobre su límite de 7).
 
-   En el panel hay un checkbox **"📣 Enviar alertas (salesbots) a
-   Kommo"** para apagar esto sin tocar nada más — desmarcado, no se
-   dispara ningún bot (pero tampoco se marca nada como "ya avisado", así
-   que si lo vuelves a activar después, los pedidos que ya iban a avisar
-   lo siguen haciendo normal).
+   Cada pedido (en "Pendientes" o dentro de la ruta de un repartidor)
+   tiene su propio checkbox **"📣 Alertas"** — no es un interruptor
+   general, es por cliente. Desmarcado, no se le dispara ningún bot a
+   ese pedido en particular (pero tampoco se marca como "ya avisado",
+   así que si lo vuelves a marcar después, sigue avisando normal).
 
 ## Limitación importante sobre "segundo plano"
 Ningún navegador (Chrome, Safari) garantiza mandar ubicación si el

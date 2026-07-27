@@ -84,6 +84,12 @@ try {
   db.exec(`ALTER TABLE stops ADD COLUMN notified_next INTEGER DEFAULT 0`);
 } catch (e) {}
 
+// Interruptor de alertas (salesbots) por cliente/pedido, no general.
+// DEFAULT 1 tambien rellena las filas existentes al agregar la columna.
+try {
+  db.exec(`ALTER TABLE customers ADD COLUMN alerts_enabled INTEGER DEFAULT 1`);
+} catch (e) {}
+
 // Punto de partida por defecto para armar rutas (ej. la oficina/bodega).
 // Se deja precargado con esta liga solo la primera vez; si el admin la
 // cambia despues desde el panel, no se vuelve a pisar.

@@ -57,7 +57,6 @@ async function init() {
   await loadStops();
   await loadKommoPipelines();
   await loadKommoFields();
-  await loadAlertsEnabled();
 
   const socket = io();
   socket.on('admin:driverUpdate', ({ driver_id, lat, lng }) => {
@@ -216,6 +215,20 @@ function setActiveTab(tab) {
 // Dibuja la lista + los marcadores del mapa segun la pestana activa:
 // "pending" muestra los pendientes seleccionables (para armar una ruta);
 // un repartidor muestra solo su ruta (asignados + entregados hoy).
+// Checkbox de alertas (salesbots) de este cliente en particular - no es un
+// interruptor general, cada pedido tiene el suyo. Se pone FUERA del
+// <label> del pedido (no anidado) porque un <label> dentro de otro
+// <label> es invalido en HTML y se comporta raro al hacer click.
+function alertsCheckboxHtml(s) {
+  const checked = s.alerts_enabled !== 0;
+  return `
+    <label class="stop-alerts-label">
+      <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleCustomerAlerts(${s.customer_id}, this.checked)" />
+      📣 Alertas
+    </label>
+  `;
+}
+
 function renderStopsList(stops) {
   const container = document.getElementById('stops');
   container.innerHTML = '';
@@ -254,6 +267,7 @@ function renderStopsList(stops) {
               ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
             </span>
           </label>
+          ${alertsCheckboxHtml(s)}
         `;
         container.appendChild(div);
 
@@ -309,6 +323,7 @@ function renderStopsList(stops) {
         </span>
         ${actionsHtml}
       </label>
+      ${done ? '' : alertsCheckboxHtml(s)}
     `;
     container.appendChild(div);
 
@@ -545,22 +560,13 @@ async function saveInvoiceField(silent) {
   if (!silent) alert('Guardado. La proxima sincronizacion usara este campo para la factura.');
 }
 
-// Interruptor global de alertas (salesbots 103880/103878). Desmarcado, no
-// se dispara nada al confirmar rutas ni al entregar - pero tampoco se
-// marca como "ya notificado", asi que si se vuelve a activar despues, los
-// pedidos que ya iban a avisar lo siguen haciendo.
-async function loadAlertsEnabled() {
-  try {
-    const { enabled } = await api('/api/admin/alerts-enabled');
-    document.getElementById('alertsEnabledCheckbox').checked = enabled;
-  } catch (e) {
-    console.error('No se pudo cargar el estado de alertas', e);
-  }
-}
-
-async function saveAlertsEnabled() {
-  const enabled = document.getElementById('alertsEnabledCheckbox').checked;
-  await api('/api/admin/alerts-enabled', {
+// Alertas (salesbots 103880/103878) por cliente/pedido, no general. Se
+// guarda al instante (sin recargar la lista, para no perder el scroll);
+// si se desmarca no se dispara nada para ese cliente pero tampoco se
+// marca como "ya notificado" - si se vuelve a activar despues sigue
+// avisando normal.
+async function toggleCustomerAlerts(customerId, enabled) {
+  await api(`/api/admin/customers/${customerId}/alerts`, {
     method: 'POST',
     body: JSON.stringify({ enabled }),
   });

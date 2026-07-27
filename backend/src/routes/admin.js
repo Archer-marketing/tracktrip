@@ -15,7 +15,6 @@ const { optimizeRoute } = require('../services/routingService');
 const { createTrackingLinksForStops } = require('../services/trackingService');
 const { getDefaultStartPoint, setDefaultStartPoint } = require('../services/startPointService');
 const { checkBotTriggersForDriver } = require('../services/botNotificationService');
-const { getSetting, setSetting } = require('../services/settingsService');
 
 const router = express.Router();
 
@@ -145,14 +144,12 @@ router.post('/default-start-point', (req, res) => {
   res.json({ ok: true });
 });
 
-// --- Alertas (salesbots de Kommo): interruptor global ---
-router.get('/alerts-enabled', (req, res) => {
-  res.json({ enabled: getSetting('alerts_enabled') !== '0' });
-});
-
-router.post('/alerts-enabled', (req, res) => {
+// Activa/desactiva las alertas (salesbots) para un cliente/pedido en
+// particular - no es un interruptor general, cada quien tiene el suyo.
+router.post('/customers/:id/alerts', (req, res) => {
+  const { id } = req.params;
   const { enabled } = req.body;
-  setSetting('alerts_enabled', enabled ? '1' : '0');
+  db.prepare('UPDATE customers SET alerts_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
   res.json({ ok: true });
 });
 
@@ -162,7 +159,7 @@ router.get('/stops', (req, res) => {
   const stops = db
     .prepare(
       `SELECT s.id, s.status, s.sequence, s.driver_id, s.delivered_at,
-              c.id as customer_id, c.name, c.address, c.lat, c.lng, c.kommo_lead_id
+              c.id as customer_id, c.name, c.address, c.lat, c.lng, c.kommo_lead_id, c.alerts_enabled
        FROM stops s JOIN customers c ON c.id = s.customer_id
        WHERE s.status != 'delivered' OR date(s.delivered_at) = date('now')
        ORDER BY s.driver_id, s.sequence`
