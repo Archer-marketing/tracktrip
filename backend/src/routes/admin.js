@@ -15,6 +15,7 @@ const { optimizeRoute } = require('../services/routingService');
 const { createTrackingLinksForStops } = require('../services/trackingService');
 const { getDefaultStartPoint, setDefaultStartPoint } = require('../services/startPointService');
 const { checkBotTriggersForDriver } = require('../services/botNotificationService');
+const { getSetting, setSetting } = require('../services/settingsService');
 
 const router = express.Router();
 
@@ -141,6 +142,17 @@ router.post('/default-start-point', (req, res) => {
   const { url, label } = req.body;
   if (!url) return res.status(400).json({ error: 'Falta la liga' });
   setDefaultStartPoint(url, label);
+  res.json({ ok: true });
+});
+
+// --- Alertas (salesbots de Kommo): interruptor global ---
+router.get('/alerts-enabled', (req, res) => {
+  res.json({ enabled: getSetting('alerts_enabled') !== '0' });
+});
+
+router.post('/alerts-enabled', (req, res) => {
+  const { enabled } = req.body;
+  setSetting('alerts_enabled', enabled ? '1' : '0');
   res.json({ ok: true });
 });
 

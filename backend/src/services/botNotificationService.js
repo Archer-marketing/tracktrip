@@ -1,5 +1,6 @@
 const db = require('../db');
 const { runSalesbot } = require('./kommoService');
+const { getSetting } = require('./settingsService');
 
 // Salesbots de Kommo a disparar segun cuantos pedidos le faltan a un
 // repartidor antes de llegar a ese lead.
@@ -15,6 +16,11 @@ const BOT_NEXT_ID = process.env.KOMMO_BOT_NEXT_ID || '103878';
 // cubrir tanto el estado inicial como los cambios por avance del repartidor.
 async function checkBotTriggersForDriver(driverId) {
   if (!driverId) return;
+
+  // Si el admin desmarco "Enviar alertas" en el panel, no se dispara nada -
+  // y tampoco se marca como notificado, para que si se vuelve a activar
+  // despues, los pedidos que ya iban a avisar lo sigan haciendo.
+  if (getSetting('alerts_enabled') === '0') return;
 
   const stops = db
     .prepare(

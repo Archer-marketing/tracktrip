@@ -57,6 +57,7 @@ async function init() {
   await loadStops();
   await loadKommoPipelines();
   await loadKommoFields();
+  await loadAlertsEnabled();
 
   const socket = io();
   socket.on('admin:driverUpdate', ({ driver_id, lat, lng }) => {
@@ -542,6 +543,27 @@ async function saveInvoiceField(silent) {
     body: JSON.stringify({ invoice_field_id }),
   });
   if (!silent) alert('Guardado. La proxima sincronizacion usara este campo para la factura.');
+}
+
+// Interruptor global de alertas (salesbots 103880/103878). Desmarcado, no
+// se dispara nada al confirmar rutas ni al entregar - pero tampoco se
+// marca como "ya notificado", asi que si se vuelve a activar despues, los
+// pedidos que ya iban a avisar lo siguen haciendo.
+async function loadAlertsEnabled() {
+  try {
+    const { enabled } = await api('/api/admin/alerts-enabled');
+    document.getElementById('alertsEnabledCheckbox').checked = enabled;
+  } catch (e) {
+    console.error('No se pudo cargar el estado de alertas', e);
+  }
+}
+
+async function saveAlertsEnabled() {
+  const enabled = document.getElementById('alertsEnabledCheckbox').checked;
+  await api('/api/admin/alerts-enabled', {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 async function syncKommo() {
