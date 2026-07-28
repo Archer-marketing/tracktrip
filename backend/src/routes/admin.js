@@ -66,6 +66,24 @@ router.post('/drivers/:id/active', (req, res) => {
   res.json({ ok: true });
 });
 
+// Elimina un repartidor por completo (a diferencia de desactivar, que solo
+// bloquea su login). Lo que le quedaba sin entregar regresa a Pendientes
+// (igual que finish-route); lo ya entregado se queda en el historial tal
+// cual, con el driver_id apuntando a un repartidor que ya no existe.
+router.delete('/drivers/:id', (req, res) => {
+  const { id } = req.params;
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE stops SET driver_id = NULL, sequence = NULL, status = 'pending', assigned_at = NULL
+       WHERE driver_id = ? AND status = 'assigned'`
+    ).run(id);
+    db.prepare('DELETE FROM driver_locations WHERE driver_id = ?').run(id);
+    db.prepare('DELETE FROM drivers WHERE id = ?').run(id);
+  });
+  tx();
+  res.json({ ok: true });
+});
+
 // --- Kommo sync ---
 router.post('/sync-kommo', async (req, res) => {
   try {

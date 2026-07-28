@@ -87,6 +87,12 @@ function timeAgo(isoString) {
   return `${hours} h ${mins % 60} min`;
 }
 
+function formatDeliveredTime(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString.replace(' ', 'T') + (isoString.endsWith('Z') ? '' : 'Z'));
+  return d.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
+}
+
 async function loadDrivers() {
   const drivers = await api('/api/admin/drivers');
   driversById = Object.fromEntries(drivers.map((d) => [String(d.id), d]));
@@ -118,6 +124,7 @@ async function loadDrivers() {
       <button class="mini-btn" onclick="toggleDriverActive(${d.id}, ${d.active ? 0 : 1})">
         ${d.active ? '🚫 Desactivar' : '✅ Activar'}
       </button>
+      <button class="mini-btn remove" onclick="deleteDriver(${d.id}, '${d.name.replace(/'/g, "\\'")}')">🗑️ Eliminar</button>
     `;
     list.appendChild(div);
 
@@ -138,6 +145,14 @@ async function toggleDriverActive(id, active) {
     body: JSON.stringify({ active }),
   });
   await loadDrivers();
+}
+
+async function deleteDriver(id, name) {
+  if (!confirm(`¿Eliminar a ${name}? Esta acción no se puede deshacer. Lo que le quedaba sin entregar regresa a Pendientes.`)) return;
+  await api(`/api/admin/drivers/${id}`, { method: 'DELETE' });
+  if (String(activeTab) === String(id)) activeTab = 'pending';
+  await loadDrivers();
+  await loadStops();
 }
 
 async function addDriver() {
@@ -397,7 +412,7 @@ function renderStopsList(stops) {
         <span class="stop-seq" style="background:${done ? '#16a34a' : color}">${done ? '✅' : s.sequence ?? '?'}</span>
         <span>
           ${s.name}<br>
-          <small>${done ? 'Entregado' : `Parada ${s.sequence ?? '?'}`}</small><br>
+          <small>${done ? `Entregado a las ${formatDeliveredTime(s.delivered_at)}` : `Parada ${s.sequence ?? '?'}`}</small><br>
           <small>${s.address || ''}</small><br>
           ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
         </span>
@@ -413,7 +428,7 @@ function renderStopsList(stops) {
         : seqIcon(s.sequence ?? '?', color);
       const marker = L.marker([s.lat, s.lng], { icon })
         .addTo(map)
-        .bindPopup(done ? `Entregado — ${s.name}` : `Siguiente parada ${s.sequence} — ${s.name} (${driver ? driver.name : 'repartidor ' + activeTab})`);
+        .bindPopup(done ? `Entregado a las ${formatDeliveredTime(s.delivered_at)} — ${s.name}` : `Siguiente parada ${s.sequence} — ${s.name} (${driver ? driver.name : 'repartidor ' + activeTab})`);
       stopMarkers.push(marker);
     }
   });
