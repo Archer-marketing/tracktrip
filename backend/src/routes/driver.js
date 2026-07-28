@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { checkBotTriggersForDriver } = require('../services/botNotificationService');
+const { updateDriverLocation } = require('../services/locationService');
 
 const router = express.Router();
 
@@ -15,11 +16,7 @@ router.post('/login', (req, res) => {
 router.post('/location', (req, res) => {
   const { driver_id, lat, lng } = req.body;
   if (!driver_id || lat == null || lng == null) return res.status(400).json({ error: 'Faltan datos' });
-  db.prepare(
-    `INSERT INTO driver_locations (driver_id, lat, lng, updated_at)
-     VALUES (?, ?, ?, datetime('now'))
-     ON CONFLICT(driver_id) DO UPDATE SET lat=excluded.lat, lng=excluded.lng, updated_at=excluded.updated_at`
-  ).run(driver_id, lat, lng);
+  updateDriverLocation(driver_id, lat, lng);
   res.json({ ok: true });
 });
 

@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
-const db = require('./db');
+const { updateDriverLocation } = require('./services/locationService');
 
 const adminRoutes = require('./routes/admin');
 const driverRoutes = require('./routes/driver');
@@ -39,11 +39,7 @@ app.get('/', (req, res) => res.redirect('/admin'));
 io.on('connection', (socket) => {
   socket.on('driver:location', ({ driver_id, lat, lng }) => {
     if (!driver_id || lat == null || lng == null) return;
-    db.prepare(
-      `INSERT INTO driver_locations (driver_id, lat, lng, updated_at)
-       VALUES (?, ?, ?, datetime('now'))
-       ON CONFLICT(driver_id) DO UPDATE SET lat=excluded.lat, lng=excluded.lng, updated_at=excluded.updated_at`
-    ).run(driver_id, lat, lng);
+    updateDriverLocation(driver_id, lat, lng);
 
     // Reenviar a todos los paneles de admin conectados
     io.emit('admin:driverUpdate', { driver_id, lat, lng, updated_at: new Date().toISOString() });

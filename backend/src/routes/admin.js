@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const {
   syncFromKommo,
+  addLeadById,
   getPipelines,
   getSyncStatusFilter,
   setSyncStatusFilter,
@@ -31,7 +32,8 @@ router.use(requireAdmin);
 router.get('/drivers', (req, res) => {
   const drivers = db
     .prepare(
-      `SELECT d.id, d.name, d.login_code, d.active, l.lat, l.lng, l.updated_at
+      `SELECT d.id, d.name, d.login_code, d.active,
+              l.lat, l.lng, l.updated_at, l.stationary_since
        FROM drivers d LEFT JOIN driver_locations l ON l.driver_id = d.id`
     )
     .all();
@@ -71,6 +73,18 @@ router.post('/sync-kommo', async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Agregar un pedido a mano por el ID del lead de Kommo, sin importar
+// el embudo/etapa configurado para el sync normal ---
+router.post('/leads/:leadId/add', async (req, res) => {
+  const { leadId } = req.params;
+  try {
+    const result = await addLeadById(leadId);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -320,6 +334,47 @@ router.post('/stops/:id/unassign', (req, res) => {
     .run(id);
   if (!info.changes) return res.status(404).json({ error: 'Pedido no encontrado o ya no esta en ruta' });
   res.json({ ok: true });
+});
+
+// Cambia un pedido ya asignado a otro repartidor (sin pasar por Pendientes).
+// Se agrega al final de la ruta del repartidor nuevo. Como el conteo de
+// "cuantos faltan" cambia en AMBAS rutas (la que lo pierde y la que lo
+// gana), se revisan los salesbots de las dos.
+router.post('/stops/:id/reassign', (req, res) => {
+  const { id } = req.params;
+  const { driver_id } = req.body;
+  if (!driver_id) return res.status(400).json({ error: 'Faltan datos' });
+
+  const stop = db
+    .prepare(`SELECT id, driver_id, sequence FROM stops WHERE id = ? AND status = 'assigned'`)
+    .get(id);
+  if (!stop) return res.status(404).json({ error: 'Pedido no encontrado o ya no esta en ruta' });
+
+  const newDriver = db.prepare('SELECT id FROM drivers WHERE id = ?').get(driver_id);
+  if (!newDriver) return res.status(404).json({ error: 'Repartidor no encontrado' });
+
+  if (Number(driver_id) === Number(stop.driver_id)) return res.json({ ok: true });
+
+  const maxSeq =
+    db
+      .prepare(`SELECT MAX(sequence) as maxSeq FROM stops WHERE driver_id = ? AND status = 'assigned'`)
+      .get(driver_id).maxSeq || 0;
+
+  const oldDriverId = stop.driver_id;
+  db.prepare('UPDATE stops SET driver_id = ?, sequence = ? WHERE id = ?').run(
+    driver_id,
+    maxSeq + 1,
+    id
+  );
+
+  res.json({ ok: true });
+
+  Promise.all([
+    oldDriverId ? checkBotTriggersForDriver(oldDriverId) : Promise.resolve(),
+    checkBotTriggersForDriver(driver_id),
+  ]).catch((err) => {
+    console.error('Error revisando salesbots tras reasignar:', err.message);
+  });
 });
 
 // Termina la ruta de un repartidor: todo lo que le quedaba sin entregar

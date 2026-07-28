@@ -64,6 +64,26 @@ async function init() {
   });
 
   setInterval(loadStops, 20000);
+  // Estado de conexion/detenido de cada repartidor: se revisa mas seguido
+  // que el resto (solo consulta la tabla de ubicaciones, es liviana).
+  setInterval(loadDrivers, 5000);
+}
+
+// Un repartidor se considera "en linea" si mando su ubicacion hace poco
+// (deja margen para el intervalo normal de envio del GPS del celular).
+const ONLINE_THRESHOLD_MS = 15000;
+
+function timeAgo(isoString) {
+  if (!isoString) return '';
+  // SQLite guarda datetime('now') en UTC sin sufijo de zona - hay que
+  // agregarle "Z" para que Date lo interprete como UTC y no como hora local.
+  const then = new Date(isoString.replace(' ', 'T') + (isoString.endsWith('Z') ? '' : 'Z'));
+  const diffMs = Date.now() - then.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'unos segundos';
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  return `${hours} h ${mins % 60} min`;
 }
 
 async function loadDrivers() {
@@ -75,12 +95,26 @@ async function loadDrivers() {
   select.innerHTML = '';
 
   drivers.forEach((d) => {
+    const color = colorForDriver(d.id);
+    const online = d.updated_at && Date.now() - new Date(d.updated_at.replace(' ', 'T') + 'Z').getTime() < ONLINE_THRESHOLD_MS;
+    const connBadge = d.lat != null
+      ? `<span class="conn-badge ${online ? 'online' : 'offline'}">${online ? '🟢 En línea' : '🔴 Última señal hace ' + timeAgo(d.updated_at)}</span>`
+      : `<span class="conn-badge offline">⚪ Sin ubicación aun</span>`;
+    const stationaryNote = d.stationary_since
+      ? `<div class="stationary-note">⏱ Detenido en el mismo punto hace ${timeAgo(d.stationary_since)}</div>`
+      : '';
+
     const div = document.createElement('div');
-    div.className = 'stop' + (d.active ? '' : ' stop-missing');
+    div.className = 'driver-card' + (d.active ? '' : ' inactive');
     div.innerHTML = `
-      <b>${d.name}</b> <span class="driver-tag">${d.lat ? 'en línea' : 'sin ubicación'}</span><br>
-      <small>código: ${d.login_code}</small><br>
-      <button class="mini-btn" style="width:auto" onclick="toggleDriverActive(${d.id}, ${d.active ? 0 : 1})">
+      <div class="driver-card-head">
+        <span class="driver-dot" style="background:${color}"></span>
+        <b>${d.name}</b>
+        ${connBadge}
+      </div>
+      <small>código: ${d.login_code}</small>
+      ${stationaryNote}
+      <button class="mini-btn" onclick="toggleDriverActive(${d.id}, ${d.active ? 0 : 1})">
         ${d.active ? '🚫 Desactivar' : '✅ Activar'}
       </button>
     `;
@@ -123,17 +157,33 @@ async function addDriver() {
   await loadDrivers();
 }
 
+// Cada repartidor lleva su color (el mismo que su tarjeta y el de las
+// paradas de su ruta) mas su inicial, para poder distinguirlos en el mapa
+// de un vistazo cuando hay varios repartidores activos a la vez.
+function driverMarkerIcon(driverId, name) {
+  const color = colorForDriver(driverId);
+  const initial = (name || '?').trim().charAt(0).toUpperCase();
+  return L.divIcon({
+    html: `
+      <div style="position:relative;width:40px;height:40px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">
+        <div style="width:36px;height:36px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid white;position:absolute;top:2px;left:2px;"></div>
+        <div style="position:absolute;top:2px;left:2px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:15px;">${initial}</div>
+      </div>
+    `,
+    iconSize: [40, 40],
+    iconAnchor: [20, 38],
+    className: '',
+  });
+}
+
 function updateDriverMarker(driverId, lat, lng, name) {
   if (driverMarkers[driverId]) {
     driverMarkers[driverId].setLatLng([lat, lng]);
+    if (name) driverMarkers[driverId].setPopupContent(name);
   } else {
-    const icon = L.divIcon({
-      html: '<div style="font-size:34px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚚</div>',
-      iconSize: [40, 40],
-      iconAnchor: [20, 20],
-      className: '',
-    });
-    driverMarkers[driverId] = L.marker([lat, lng], { icon }).addTo(map).bindPopup(name || `Repartidor ${driverId}`);
+    driverMarkers[driverId] = L.marker([lat, lng], { icon: driverMarkerIcon(driverId, name) })
+      .addTo(map)
+      .bindPopup(name || `Repartidor ${driverId}`);
   }
 }
 
@@ -316,6 +366,18 @@ function renderStopsList(stops) {
     const isFirst = posAmongAssigned <= 0;
     const isLast = posAmongAssigned === assignedNeighbors.length - 1;
 
+    const otherDrivers = Object.values(driversById).filter(
+      (d) => d.active && String(d.id) !== String(activeTab)
+    );
+    const reassignHtml = otherDrivers.length
+      ? `
+        <select class="reassign-select" onchange="if(this.value) reassignStop(${s.id}, this.value); this.value='';">
+          <option value="">↔ Cambiar a...</option>
+          ${otherDrivers.map((d) => `<option value="${d.id}">${d.name}</option>`).join('')}
+        </select>
+      `
+      : '';
+
     const actionsHtml = done
       ? ''
       : `
@@ -323,6 +385,7 @@ function renderStopsList(stops) {
           <button class="mini-btn" onclick="moveStop(${s.id}, 'up')" ${isFirst ? 'disabled' : ''}>▲</button>
           <button class="mini-btn" onclick="moveStop(${s.id}, 'down')" ${isLast ? 'disabled' : ''}>▼</button>
           <button class="mini-btn remove" onclick="unassignStop(${s.id})">✖</button>
+          ${reassignHtml}
         </span>
       `;
 
@@ -486,6 +549,15 @@ async function moveStop(stopId, direction) {
   await loadStops();
 }
 
+async function reassignStop(stopId, newDriverId) {
+  const result = await api(`/api/admin/stops/${stopId}/reassign`, {
+    method: 'POST',
+    body: JSON.stringify({ driver_id: newDriverId }),
+  });
+  if (result.error) return alert(result.error);
+  await loadStops();
+}
+
 async function unassignStop(stopId) {
   if (!confirm('¿Quitar este pedido de la ruta? Regresa a "Pendientes" para reasignarlo.')) return;
   const result = await api(`/api/admin/stops/${stopId}/unassign`, { method: 'POST' });
@@ -620,6 +692,34 @@ async function syncKommo() {
   }
   btn.disabled = false;
   btn.textContent = '🔄 Sincronizar pedidos desde Kommo';
+}
+
+// Agrega un pedido a mano por el ID del lead de Kommo, sin esperar a que
+// caiga en el embudo/etapa sincronizado normalmente (ej. un pedido urgente
+// que quedo en otra etapa).
+async function addLeadManually() {
+  const input = document.getElementById('manualLeadId');
+  const leadId = input.value.trim();
+  if (!leadId) return alert('Pon el ID del lead de Kommo');
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Agregando...';
+  try {
+    const result = await api(`/api/admin/leads/${encodeURIComponent(leadId)}/add`, { method: 'POST' });
+    if (result.error) {
+      alert(result.error);
+    } else if (result.errors && result.errors.length) {
+      alert(result.errors.join('\n'));
+    } else {
+      input.value = '';
+      await loadStops();
+    }
+  } catch (e) {
+    alert('Error al agregar el pedido: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = '➕ Agregar';
 }
 
 function clearPreview() {

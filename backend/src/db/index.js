@@ -99,6 +99,13 @@ try {
   db.exec(`ALTER TABLE drivers ADD COLUMN route_started INTEGER DEFAULT 0`);
 } catch (e) {}
 
+// Desde cuando el repartidor esta en (mas o menos) el mismo punto - solo
+// para que el admin vea "detenido hace Xm". Se actualiza a la hora actual
+// cuando se mueve mas de ~40m; si no, se deja igual.
+try {
+  db.exec(`ALTER TABLE driver_locations ADD COLUMN stationary_since TEXT`);
+} catch (e) {}
+
 // Punto de partida por defecto para armar rutas (ej. la oficina/bodega).
 // Se deja precargado con esta liga solo la primera vez; si el admin la
 // cambia despues desde el panel, no se vuelve a pisar.

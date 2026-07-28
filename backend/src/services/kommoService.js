@@ -125,6 +125,82 @@ function extractCustomField(lead, fieldId) {
   return cf.values[0].value;
 }
 
+function customerStatements() {
+  return {
+    insertCustomer: db.prepare(`
+      INSERT INTO customers (kommo_lead_id, name, address, lat, lng, phone, invoice)
+      VALUES (@kommo_lead_id, @name, @address, @lat, @lng, @phone, @invoice)
+      ON CONFLICT(kommo_lead_id) DO UPDATE SET
+        name=excluded.name, address=excluded.address,
+        lat=excluded.lat, lng=excluded.lng, phone=excluded.phone, invoice=excluded.invoice
+    `),
+    findCustomerId: db.prepare(`SELECT id FROM customers WHERE kommo_lead_id = ?`),
+    hasPendingStop: db.prepare(
+      `SELECT id FROM stops WHERE customer_id = ? AND status IN ('pending','assigned')`
+    ),
+    insertStop: db.prepare(`INSERT INTO stops (customer_id, status) VALUES (?, 'pending')`),
+  };
+}
+
+// Procesa un lead (geocodifica/guarda como customer + stop pendiente).
+// Compartido por syncFromKommo (varios leads de un filtro) y addLeadById
+// (un lead especifico agregado a mano, sin importar el filtro/etapa).
+async function processLead(lead, fieldIds, statements, results) {
+  const { field_id, invoice_field_id } = fieldIds;
+  const { insertCustomer, findCustomerId, hasPendingStop, insertStop } = statements;
+
+  try {
+    const raw = extractCustomField(lead, field_id);
+    let lat = null;
+    let lng = null;
+
+    const parsed = await parseLatLng(raw);
+    if (parsed) {
+      lat = parsed.lat;
+      lng = parsed.lng;
+    } else if (raw) {
+      const geo = await geocodeAddress(raw);
+      if (geo) {
+        lat = geo.lat;
+        lng = geo.lng;
+        results.geocoded++;
+      }
+    }
+
+    // Aunque no tengamos ubicacion, guardamos el lead igual (lat/lng en null)
+    // para que aparezca marcado como "sin ubicacion" en el panel, en vez de
+    // desaparecer silenciosamente hasta la proxima sincronizacion.
+    if (lat == null || lng == null) {
+      results.skipped++;
+      const reason = !raw
+        ? 'no se encontro el campo de direccion/Maps en este lead (revisa el selector "Kommo: campo" en el panel)'
+        : `no se pudo geocodificar "${raw}"`;
+      results.errors.push(`Lead ${lead.id} (${lead.name}): ${reason}`);
+    }
+
+    const phone = lead._embedded?.contacts?.[0]?.id ? '' : '';
+    const invoice = extractCustomField(lead, invoice_field_id);
+
+    insertCustomer.run({
+      kommo_lead_id: String(lead.id),
+      name: lead.name || `Pedido ${lead.id}`,
+      address: raw || '',
+      lat,
+      lng,
+      phone,
+      invoice: invoice || null,
+    });
+
+    const customer = findCustomerId.get(String(lead.id));
+    if (customer && !hasPendingStop.get(customer.id)) {
+      insertStop.run(customer.id);
+    }
+    results.synced++;
+  } catch (err) {
+    results.errors.push(`Lead ${lead.id}: ${err.message}`);
+  }
+}
+
 // Trae los leads del pipeline/status configurado como "listos para entregar"
 // y los sincroniza como customers + stops pendientes.
 async function syncFromKommo() {
@@ -144,78 +220,14 @@ async function syncFromKommo() {
   const { data } = await client.get('/leads', { params });
   const leads = data?._embedded?.leads || [];
 
-  const insertCustomer = db.prepare(`
-    INSERT INTO customers (kommo_lead_id, name, address, lat, lng, phone, invoice)
-    VALUES (@kommo_lead_id, @name, @address, @lat, @lng, @phone, @invoice)
-    ON CONFLICT(kommo_lead_id) DO UPDATE SET
-      name=excluded.name, address=excluded.address,
-      lat=excluded.lat, lng=excluded.lng, phone=excluded.phone, invoice=excluded.invoice
-  `);
-  const findCustomerId = db.prepare(`SELECT id FROM customers WHERE kommo_lead_id = ?`);
-  const hasPendingStop = db.prepare(
-    `SELECT id FROM stops WHERE customer_id = ? AND status IN ('pending','assigned')`
-  );
-  const insertStop = db.prepare(
-    `INSERT INTO stops (customer_id, status) VALUES (?, 'pending')`
-  );
-
+  const statements = customerStatements();
+  const fieldIds = { field_id: getSyncFieldConfig().field_id, invoice_field_id: getSyncInvoiceFieldConfig().invoice_field_id };
   const results = { synced: 0, geocoded: 0, skipped: 0, removed: 0, errors: [] };
-  const { field_id } = getSyncFieldConfig();
-  const { invoice_field_id } = getSyncInvoiceFieldConfig();
   const syncedLeadIds = new Set();
 
   for (const lead of leads) {
-    try {
-      const raw = extractCustomField(lead, field_id);
-      let lat = null;
-      let lng = null;
-
-      const parsed = await parseLatLng(raw);
-      if (parsed) {
-        lat = parsed.lat;
-        lng = parsed.lng;
-      } else if (raw) {
-        const geo = await geocodeAddress(raw);
-        if (geo) {
-          lat = geo.lat;
-          lng = geo.lng;
-          results.geocoded++;
-        }
-      }
-
-      // Aunque no tengamos ubicacion, guardamos el lead igual (lat/lng en null)
-      // para que aparezca marcado como "sin ubicacion" en el panel, en vez de
-      // desaparecer silenciosamente hasta la proxima sincronizacion.
-      if (lat == null || lng == null) {
-        results.skipped++;
-        const reason = !raw
-          ? 'no se encontro el campo de direccion/Maps en este lead (revisa el selector "Kommo: campo" en el panel)'
-          : `no se pudo geocodificar "${raw}"`;
-        results.errors.push(`Lead ${lead.id} (${lead.name}): ${reason}`);
-      }
-
-      const phone = lead._embedded?.contacts?.[0]?.id ? '' : '';
-      const invoice = extractCustomField(lead, invoice_field_id);
-
-      insertCustomer.run({
-        kommo_lead_id: String(lead.id),
-        name: lead.name || `Pedido ${lead.id}`,
-        address: raw || '',
-        lat,
-        lng,
-        phone,
-        invoice: invoice || null,
-      });
-
-      const customer = findCustomerId.get(String(lead.id));
-      if (customer && !hasPendingStop.get(customer.id)) {
-        insertStop.run(customer.id);
-      }
-      syncedLeadIds.add(String(lead.id));
-      results.synced++;
-    } catch (err) {
-      results.errors.push(`Lead ${lead.id}: ${err.message}`);
-    }
+    await processLead(lead, fieldIds, statements, results);
+    syncedLeadIds.add(String(lead.id));
   }
 
   // Quita de "pendientes" los leads que ya no aparecen en este sync (ej.
@@ -240,8 +252,32 @@ async function syncFromKommo() {
   return results;
 }
 
+// Agrega un lead especifico por su ID, sin importar el embudo/etapa
+// configurado para el sync normal - para cuando falta un pedido puntual.
+async function addLeadById(leadId) {
+  const client = kommoClient();
+  let lead;
+  try {
+    const { data } = await client.get(`/leads/${leadId}`, { params: { with: 'contacts' } });
+    lead = data;
+  } catch (err) {
+    if (err.response?.status === 404) {
+      throw new Error(`No se encontro el lead ${leadId} en Kommo`);
+    }
+    throw err;
+  }
+
+  const statements = customerStatements();
+  const fieldIds = { field_id: getSyncFieldConfig().field_id, invoice_field_id: getSyncInvoiceFieldConfig().invoice_field_id };
+  const results = { synced: 0, geocoded: 0, skipped: 0, errors: [] };
+
+  await processLead(lead, fieldIds, statements, results);
+  return results;
+}
+
 module.exports = {
   syncFromKommo,
+  addLeadById,
   getPipelines,
   getSyncStatusFilter,
   setSyncStatusFilter,
