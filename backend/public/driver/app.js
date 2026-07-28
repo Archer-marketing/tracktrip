@@ -3,9 +3,11 @@ let driverName = localStorage.getItem('driverName');
 let socket;
 let watchId;
 let pollIntervalId;
+let statusIntervalId;
 let routeMap, routeMarkers = [];
 let routeVisible = false;
 let myLat = null, myLng = null, myLocationMarker = null;
+let lastSentAt = null;
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/driver/sw.js').catch(() => {});
@@ -19,14 +21,32 @@ async function requestWakeLock() {
     if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
   } catch (e) { /* no critico */ }
 }
+// Al volver a la pestaña (ej. el repartidor cierra Google Maps y regresa),
+// no esperamos al siguiente tick natural del GPS: pedimos una lectura de
+// una vez para cerrar el hueco de ubicacion lo antes posible.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') requestWakeLock();
+  if (document.visibilityState === 'visible') {
+    requestWakeLock();
+    if (driverId && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => sendLocation(pos.coords.latitude, pos.coords.longitude),
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+      );
+    }
+  }
 });
 
 function setStatus(on) {
   const el = document.getElementById('statusBar');
-  el.textContent = on ? 'Ubicación: activa ✅' : 'Ubicación: inactiva';
   el.className = 'status ' + (on ? 'on' : 'off');
+  if (!on) {
+    el.textContent = 'Ubicación: inactiva';
+    return;
+  }
+  const secs = lastSentAt ? Math.floor((Date.now() - lastSentAt) / 1000) : null;
+  const ago = secs == null ? '' : secs < 5 ? ' · al instante' : secs < 60 ? ` · hace ${secs}s` : ` · hace ${Math.floor(secs / 60)}m`;
+  el.textContent = `Ubicación: activa ✅${ago}`;
 }
 
 async function login() {
@@ -71,6 +91,11 @@ function logout() {
     clearInterval(pollIntervalId);
     pollIntervalId = null;
   }
+  if (statusIntervalId) {
+    clearInterval(statusIntervalId);
+    statusIntervalId = null;
+  }
+  lastSentAt = null;
   localStorage.removeItem('driverId');
   localStorage.removeItem('driverName');
   driverId = null;
@@ -87,35 +112,46 @@ function logout() {
   document.getElementById('toggleRouteBtn').textContent = '🗺️ Ver ruta completa';
 }
 
+// Manda una lectura de ubicacion al servidor (via socket si esta conectado,
+// si no por HTTP) y actualiza el estado en pantalla. La usan tanto el GPS
+// continuo (watchPosition) como la reconexion inmediata al volver a la
+// pestaña.
+function sendLocation(lat, lng) {
+  myLat = lat;
+  myLng = lng;
+  lastSentAt = Date.now();
+  setStatus(true);
+  if (routeVisible) updateMyLocationMarker();
+
+  const payload = { driver_id: driverId, lat, lng };
+  if (socket && socket.connected) {
+    socket.emit('driver:location', payload);
+  } else {
+    fetch('/api/driver/location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }
+}
+
 function startTracking() {
   if (!navigator.geolocation) return alert('Este navegador no soporta geolocalización');
   socket = io();
 
   watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const { latitude, longitude } = pos.coords;
-      setStatus(true);
-      myLat = latitude;
-      myLng = longitude;
-      if (routeVisible) updateMyLocationMarker();
-
-      const payload = { driver_id: driverId, lat: latitude, lng: longitude };
-      if (socket && socket.connected) {
-        socket.emit('driver:location', payload);
-      } else {
-        fetch('/api/driver/location', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }).catch(() => {});
-      }
-    },
+    (pos) => sendLocation(pos.coords.latitude, pos.coords.longitude),
     (err) => {
       setStatus(false);
       console.error(err);
     },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
   );
+
+  // Refresca el "hace Xm" en pantalla aunque no llegue una lectura nueva
+  // todavia (para que no se quede pegado en "al instante" por minutos).
+  if (statusIntervalId) clearInterval(statusIntervalId);
+  statusIntervalId = setInterval(() => setStatus(lastSentAt != null), 5000);
 }
 
 async function pollNextStop() {
