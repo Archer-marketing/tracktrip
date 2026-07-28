@@ -1,20 +1,13 @@
 const express = require('express');
 const db = require('../db');
-const { getMonitorToken } = require('../services/monitorTokenService');
 
 const router = express.Router();
 
-// Publica, sin contraseña de admin: es la liga que se comparte con el
-// equipo para ver a todos los repartidores en vivo (no permite editar
-// nada, solo lectura). El token es siempre el mismo (derivado del
-// password de admin, no se guarda en la base de datos) para que la liga
-// nunca cambie sola, ni siquiera si se resetea la base de datos en un deploy.
-router.get('/:token/data', (req, res) => {
-  const { token } = req.params;
-  if (token !== getMonitorToken()) {
-    return res.status(404).json({ error: 'Liga invalida' });
-  }
-
+// Publica y sin token: es la liga fija que se comparte con el equipo para
+// ver a todos los repartidores en vivo (solo lectura, no permite editar
+// nada). A proposito no pide contraseña ni token para que la liga sea
+// siempre /monitor, sin nada que copiar mal ni que se rompa con un deploy.
+router.get('/data', (req, res) => {
   const drivers = db
     .prepare(
       `SELECT d.id, d.name, l.lat, l.lng, l.updated_at, l.stationary_since

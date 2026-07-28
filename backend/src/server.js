@@ -31,14 +31,12 @@ app.use('/admin', express.static(path.join(__dirname, '..', 'public', 'admin')))
 app.use('/driver', express.static(path.join(__dirname, '..', 'public', 'driver')));
 app.use('/track', express.static(path.join(__dirname, '..', 'public', 'track')));
 app.use('/monitor', express.static(path.join(__dirname, '..', 'public', 'monitor')));
-// Ligas publicas con token en la URL (/track/<token>, /monitor/<token>): sirven
-// el mismo index.html para que el frontend lea el token del path, ya que no
-// son archivos reales.
+// Liga publica de rastreo con token en la URL (/track/<token>): sirve el
+// mismo index.html para que el frontend lea el token del path, ya que no
+// es un archivo real. La de monitoreo NO lleva token (es /monitor a secas,
+// servida directo por el static de arriba) - liga fija y publica a proposito.
 app.get('/track/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'track', 'index.html'));
-});
-app.get('/monitor/:token', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'monitor', 'index.html'));
 });
 app.get('/', (req, res) => res.redirect('/admin'));
 

@@ -1,6 +1,3 @@
-const pathParts = location.pathname.split('/').filter(Boolean);
-const token = pathParts.length > 1 ? pathParts[pathParts.length - 1] : null;
-
 let map;
 const driverMarkers = {};
 const stopMarkers = {}; // driverId -> [markers]
@@ -58,12 +55,6 @@ function ensureMap() {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap',
   }).addTo(map);
-}
-
-function renderEmpty(icon, text) {
-  document.getElementById('drivers').innerHTML = `
-    <div class="empty-state"><div class="icon">${icon}</div><p>${text}</p></div>
-  `;
 }
 
 function renderDrivers(drivers) {
@@ -165,16 +156,8 @@ function renderDrivers(drivers) {
 }
 
 async function poll() {
-  if (!token) {
-    renderEmpty('🔗', 'Liga inválida.');
-    return;
-  }
   try {
-    const res = await fetch(`/api/monitor/${token}/data`);
-    if (res.status === 404) {
-      renderEmpty('🔗', 'Esta liga de monitoreo no es válida. Pide una nueva desde el panel de admin.');
-      return;
-    }
+    const res = await fetch('/api/monitor/data');
     const data = await res.json();
     renderDrivers(data.drivers || []);
   } catch (e) {
