@@ -1,5 +1,7 @@
 const express = require('express');
+const crypto = require('crypto');
 const db = require('../db');
+const { getSetting, setSetting } = require('../services/settingsService');
 const {
   syncFromKommo,
   addLeadById,
@@ -156,6 +158,26 @@ router.post('/default-start-point', (req, res) => {
   if (!url) return res.status(400).json({ error: 'Falta la liga' });
   setDefaultStartPoint(url, label);
   res.json({ ok: true });
+});
+
+// --- Liga de monitoreo: vista de solo lectura con todos los repartidores
+// en vivo (ubicacion, ultima conexion, cuantos entregados, ruta restante),
+// para compartir con el equipo sin dar la contraseña de admin ---
+router.get('/monitor-link', (req, res) => {
+  let token = getSetting('monitor_token');
+  if (!token) {
+    token = crypto.randomBytes(24).toString('base64url');
+    setSetting('monitor_token', token);
+  }
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.json({ token, url: `${baseUrl}/monitor/${token}` });
+});
+
+router.post('/monitor-link/regenerate', (req, res) => {
+  const token = crypto.randomBytes(24).toString('base64url');
+  setSetting('monitor_token', token);
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.json({ token, url: `${baseUrl}/monitor/${token}` });
 });
 
 // --- Customers / stops (pendientes + asignados + entregados hoy, para ver

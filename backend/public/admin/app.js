@@ -57,6 +57,7 @@ async function init() {
   await loadStops();
   await loadKommoPipelines();
   await loadKommoFields();
+  await loadMonitorLink();
 
   const socket = io();
   socket.on('admin:driverUpdate', ({ driver_id, lat, lng }) => {
@@ -571,6 +572,31 @@ async function finishRoute(driverId) {
   if (result.error) return alert(result.error);
   activeTab = 'pending';
   await loadStops();
+}
+
+// --- Liga de monitoreo (vista de solo lectura para compartir con el equipo) ---
+async function loadMonitorLink() {
+  try {
+    const result = await api('/api/admin/monitor-link');
+    document.getElementById('monitorLinkInput').value = result.url;
+  } catch (e) {
+    console.error('No se pudo cargar la liga de monitoreo', e);
+  }
+}
+
+function copyMonitorLink() {
+  const input = document.getElementById('monitorLinkInput');
+  input.select();
+  navigator.clipboard?.writeText(input.value).then(
+    () => alert('Liga copiada.'),
+    () => document.execCommand('copy')
+  );
+}
+
+async function regenerateMonitorLink() {
+  if (!confirm('¿Regenerar la liga de monitoreo? La liga anterior dejará de funcionar.')) return;
+  const result = await api('/api/admin/monitor-link/regenerate', { method: 'POST' });
+  document.getElementById('monitorLinkInput').value = result.url;
 }
 
 let kommoPipelines = [];

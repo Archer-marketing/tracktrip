@@ -9,6 +9,7 @@ const { updateDriverLocation } = require('./services/locationService');
 const adminRoutes = require('./routes/admin');
 const driverRoutes = require('./routes/driver');
 const trackRoutes = require('./routes/track');
+const monitorRoutes = require('./routes/monitor');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,14 +25,20 @@ app.use(express.json());
 app.use('/api/admin', adminRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api/track', trackRoutes);
+app.use('/api/monitor', monitorRoutes);
 
 app.use('/admin', express.static(path.join(__dirname, '..', 'public', 'admin')));
 app.use('/driver', express.static(path.join(__dirname, '..', 'public', 'driver')));
 app.use('/track', express.static(path.join(__dirname, '..', 'public', 'track')));
-// Liga publica con token en la URL (/track/<token>): sirve el mismo index.html
-// para que el frontend lea el token del path, ya que no es un archivo real.
+app.use('/monitor', express.static(path.join(__dirname, '..', 'public', 'monitor')));
+// Ligas publicas con token en la URL (/track/<token>, /monitor/<token>): sirven
+// el mismo index.html para que el frontend lea el token del path, ya que no
+// son archivos reales.
 app.get('/track/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'track', 'index.html'));
+});
+app.get('/monitor/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'monitor', 'index.html'));
 });
 app.get('/', (req, res) => res.redirect('/admin'));
 

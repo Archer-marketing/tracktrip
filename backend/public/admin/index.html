@@ -114,6 +114,16 @@
     </div>
 
     <div class="panel-section">
+      <h3>🔗 Liga de monitoreo</h3>
+      <div class="pin-label">Compártela con el equipo para ver a todos los repartidores en vivo (sin poder editar nada).</div>
+      <input id="monitorLinkInput" type="text" readonly onclick="this.select()" />
+      <div class="manual-add-row" style="margin-top:8px;">
+        <button onclick="copyMonitorLink()">📋 Copiar</button>
+        <button onclick="regenerateMonitorLink()">🔄 Regenerar</button>
+      </div>
+    </div>
+
+    <div class="panel-section">
       <h3>Kommo: embudo y etapa</h3>
       <select id="pipelineSelect" onchange="onPipelineChange()"></select>
       <select id="statusSelect" onchange="saveKommoFilter(true)"></select>
