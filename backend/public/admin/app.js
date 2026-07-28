@@ -593,12 +593,6 @@ function copyMonitorLink() {
   );
 }
 
-async function regenerateMonitorLink() {
-  if (!confirm('¿Regenerar la liga de monitoreo? La liga anterior dejará de funcionar.')) return;
-  const result = await api('/api/admin/monitor-link/regenerate', { method: 'POST' });
-  document.getElementById('monitorLinkInput').value = result.url;
-}
-
 let kommoPipelines = [];
 
 async function loadKommoPipelines() {

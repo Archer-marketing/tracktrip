@@ -1,18 +1,17 @@
 const express = require('express');
 const db = require('../db');
-const { getSetting } = require('../services/settingsService');
+const { getMonitorToken } = require('../services/monitorTokenService');
 
 const router = express.Router();
 
 // Publica, sin contraseña de admin: es la liga que se comparte con el
 // equipo para ver a todos los repartidores en vivo (no permite editar
-// nada, solo lectura). Se valida contra el token guardado en settings
-// en vez del password de admin, para poder compartirla sin dar acceso
-// al panel completo.
+// nada, solo lectura). El token es siempre el mismo (derivado del
+// password de admin, no se guarda en la base de datos) para que la liga
+// nunca cambie sola, ni siquiera si se resetea la base de datos en un deploy.
 router.get('/:token/data', (req, res) => {
   const { token } = req.params;
-  const monitorToken = getSetting('monitor_token');
-  if (!monitorToken || token !== monitorToken) {
+  if (token !== getMonitorToken()) {
     return res.status(404).json({ error: 'Liga invalida' });
   }
 

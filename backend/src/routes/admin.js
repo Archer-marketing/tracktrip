@@ -1,7 +1,6 @@
 const express = require('express');
-const crypto = require('crypto');
 const db = require('../db');
-const { getSetting, setSetting } = require('../services/settingsService');
+const { getMonitorToken } = require('../services/monitorTokenService');
 const {
   syncFromKommo,
   addLeadById,
@@ -162,20 +161,12 @@ router.post('/default-start-point', (req, res) => {
 
 // --- Liga de monitoreo: vista de solo lectura con todos los repartidores
 // en vivo (ubicacion, ultima conexion, cuantos entregados, ruta restante),
-// para compartir con el equipo sin dar la contraseña de admin ---
+// para compartir con el equipo sin dar la contraseña de admin. El token es
+// siempre el mismo (no se guarda en base de datos), asi que la liga es
+// permanente: no cambia sola ni se pierde en un deploy. Solo cambia si se
+// cambia el password de admin. ---
 router.get('/monitor-link', (req, res) => {
-  let token = getSetting('monitor_token');
-  if (!token) {
-    token = crypto.randomBytes(24).toString('base64url');
-    setSetting('monitor_token', token);
-  }
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
-  res.json({ token, url: `${baseUrl}/monitor/${token}` });
-});
-
-router.post('/monitor-link/regenerate', (req, res) => {
-  const token = crypto.randomBytes(24).toString('base64url');
-  setSetting('monitor_token', token);
+  const token = getMonitorToken();
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.json({ token, url: `${baseUrl}/monitor/${token}` });
 });
