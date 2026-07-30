@@ -358,6 +358,7 @@ function renderStopsList(stops) {
               ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
             </span>
           </label>
+          ${alertCheckboxesHtml(s)}
         `;
         container.appendChild(div);
 
