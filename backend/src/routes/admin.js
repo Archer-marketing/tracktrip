@@ -7,8 +7,6 @@ const {
   getSyncStatusFilter,
   setSyncStatusFilter,
   getLeadCustomFields,
-  getSyncFieldConfig,
-  setSyncFieldConfig,
   getSyncInvoiceFieldConfig,
   setSyncInvoiceFieldConfig,
 } = require('../services/kommoService');
@@ -137,16 +135,8 @@ router.get('/kommo/custom-fields', async (req, res) => {
   }
 });
 
-router.get('/kommo/field-config', (req, res) => {
-  res.json(getSyncFieldConfig());
-});
-
-router.post('/kommo/field-config', (req, res) => {
-  const { field_id } = req.body;
-  if (!field_id) return res.status(400).json({ error: 'Faltan datos' });
-  setSyncFieldConfig(field_id);
-  res.json({ ok: true });
-});
+// El campo de direccion/liga de Maps (KOMMO_LATLNG_FIELD_ID / KOMMO_ADDRESS_FIELD_ID)
+// es fijo por variable de entorno, sin control aqui - ver getSyncFieldConfig.
 
 // --- Kommo: campo opcional con la factura, para mostrarsela al repartidor ---
 router.get('/kommo/invoice-field-config', (req, res) => {

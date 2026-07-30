@@ -666,17 +666,14 @@ async function saveKommoFilter(silent) {
   if (!silent) alert('Guardado. La proxima sincronizacion usara este embudo/etapa.');
 }
 
+// El campo de direccion/liga de Maps ya no se elige aqui (es fijo por
+// variable de entorno) - esto solo llena el select de factura.
 async function loadKommoFields() {
   try {
     const fields = await api('/api/admin/kommo/custom-fields');
-    const current = await api('/api/admin/kommo/field-config');
     const currentInvoice = await api('/api/admin/kommo/invoice-field-config');
 
     const options = fields.map((f) => `<option value="${f.id}">${f.name} (${f.type})</option>`).join('');
-
-    const fieldSelect = document.getElementById('fieldSelect');
-    fieldSelect.innerHTML = options;
-    if (current.field_id) fieldSelect.value = current.field_id;
 
     const invoiceSelect = document.getElementById('invoiceFieldSelect');
     invoiceSelect.innerHTML = '<option value="">(sin factura)</option>' + options;
@@ -684,19 +681,6 @@ async function loadKommoFields() {
   } catch (e) {
     console.error('No se pudieron cargar los campos de Kommo', e);
   }
-}
-
-async function saveKommoFields(silent) {
-  const field_id = document.getElementById('fieldSelect').value;
-  if (!field_id) {
-    if (!silent) alert('Elige un campo');
-    return;
-  }
-  await api('/api/admin/kommo/field-config', {
-    method: 'POST',
-    body: JSON.stringify({ field_id }),
-  });
-  if (!silent) alert('Guardado. La proxima sincronizacion usara este campo.');
 }
 
 async function saveInvoiceField(silent) {

@@ -106,20 +106,12 @@ async function getLeadCustomFields() {
 
 // Un solo campo: puede tener texto de direccion o una liga de Maps
 // (completa, acortada, o "lat,lng" plano). syncFromKommo detecta cual es.
+// Fijo por variable de entorno (igual que KOMMO_TRACKING_FIELD_ID) - sin
+// control en el panel.
 function getSyncFieldConfig() {
   return {
-    field_id:
-      getSetting('kommo_field_id') ||
-      getSetting('kommo_latlng_field_id') ||
-      getSetting('kommo_address_field_id') ||
-      process.env.KOMMO_LATLNG_FIELD_ID ||
-      process.env.KOMMO_ADDRESS_FIELD_ID ||
-      '',
+    field_id: process.env.KOMMO_LATLNG_FIELD_ID || process.env.KOMMO_ADDRESS_FIELD_ID || '',
   };
-}
-
-function setSyncFieldConfig(fieldId) {
-  setSetting('kommo_field_id', fieldId ? String(fieldId) : '');
 }
 
 // Campo opcional con la factura del pedido (liga o texto), para mostrarle
@@ -299,7 +291,6 @@ module.exports = {
   setSyncStatusFilter,
   getLeadCustomFields,
   getSyncFieldConfig,
-  setSyncFieldConfig,
   getSyncInvoiceFieldConfig,
   setSyncInvoiceFieldConfig,
   updateLeadTrackingField,
