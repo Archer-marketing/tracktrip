@@ -66,6 +66,8 @@ OSRM_URL=http://localhost:5000
 KOMMO_TRACKING_FIELD_ID=2445646
 KOMMO_BOT_3_AWAY_ID=103880
 KOMMO_BOT_NEXT_ID=103878
+KOMMO_DELIVERED_STATUS_ID=
+KOMMO_DELIVERED_PIPELINE_ID=
 ```
 (`PORT` y `SQLITE_PATH` ya vienen fijos en el `Dockerfile`/`docker-compose.yml`,
 no hace falta tocarlos). Ver la sección **"Configurar Kommo"** más abajo para
@@ -286,6 +288,12 @@ entregado nunca se toca.
    mandar esa alerta a ese pedido aunque lo reasignes o edites la ruta
    varias veces, salvo que tú mismo la vuelvas a marcar (ahí se revisa
    al toque si ya toca dispararla).
+8. Cuando el repartidor marca un pedido como **entregado**, si configuraste
+   **`KOMMO_DELIVERED_STATUS_ID`** el lead se mueve automáticamente a esa
+   etapa en Kommo (opcionalmente junto con **`KOMMO_DELIVERED_PIPELINE_ID`**
+   si esa etapa vive en otro embudo). Es fijo por variable de entorno, igual
+   que `KOMMO_TRACKING_FIELD_ID` — no hay control para esto en el panel. Si
+   no la configuras, simplemente no mueve nada.
 
 ## Limitación importante sobre "segundo plano"
 Ningún navegador (Chrome, Safari) garantiza mandar ubicación si el

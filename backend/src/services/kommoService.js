@@ -49,6 +49,22 @@ async function runSalesbot(botId, leadId) {
   );
 }
 
+// Al marcar un pedido como entregado, mueve el lead a la etapa configurada
+// por variable de entorno (igual que KOMMO_TRACKING_FIELD_ID: fijo por env,
+// sin control en el panel). Si no esta configurada, no hace nada.
+async function markLeadDelivered(leadId) {
+  const statusId = process.env.KOMMO_DELIVERED_STATUS_ID;
+  if (!statusId) return;
+
+  const body = { status_id: Number(statusId) };
+  if (process.env.KOMMO_DELIVERED_PIPELINE_ID) {
+    body.pipeline_id = Number(process.env.KOMMO_DELIVERED_PIPELINE_ID);
+  }
+
+  const client = kommoClient();
+  return throttledKommoCall(() => client.patch(`/leads/${leadId}`, body));
+}
+
 // Embudos (pipelines) y etapas (statuses) de la cuenta, para el selector del panel.
 async function getPipelines() {
   const client = kommoClient();
@@ -288,4 +304,5 @@ module.exports = {
   setSyncInvoiceFieldConfig,
   updateLeadTrackingField,
   runSalesbot,
+  markLeadDelivered,
 };

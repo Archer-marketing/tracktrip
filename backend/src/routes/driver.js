@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { checkBotTriggersForDriver } = require('../services/botNotificationService');
 const { updateDriverLocation } = require('../services/locationService');
+const { markLeadDelivered } = require('../services/kommoService');
 
 const router = express.Router();
 
@@ -84,7 +85,13 @@ router.get('/route/:driverId', (req, res) => {
 
 router.post('/complete-stop', (req, res) => {
   const { stop_id } = req.body;
-  const stop = db.prepare('SELECT driver_id FROM stops WHERE id = ?').get(stop_id);
+  const stop = db
+    .prepare(
+      `SELECT s.driver_id, c.kommo_lead_id
+       FROM stops s JOIN customers c ON c.id = s.customer_id
+       WHERE s.id = ?`
+    )
+    .get(stop_id);
   db.prepare(`UPDATE stops SET status = 'delivered', delivered_at = datetime('now') WHERE id = ?`).run(
     stop_id
   );
@@ -95,6 +102,14 @@ router.post('/complete-stop', (req, res) => {
   if (stop && stop.driver_id) {
     checkBotTriggersForDriver(stop.driver_id).catch((err) => {
       console.error('Error disparando salesbots de Kommo:', err.message);
+    });
+  }
+
+  // Mueve el lead a la etapa de "entregado" configurada por env (si se
+  // configuro - ver KOMMO_DELIVERED_STATUS_ID).
+  if (stop && stop.kommo_lead_id) {
+    markLeadDelivered(stop.kommo_lead_id).catch((err) => {
+      console.error('Error moviendo el lead de Kommo al entregar:', err.message);
     });
   }
 });
