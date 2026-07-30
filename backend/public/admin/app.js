@@ -98,6 +98,10 @@ async function loadDrivers() {
   driversById = Object.fromEntries(drivers.map((d) => [String(d.id), d]));
   const list = document.getElementById('drivers');
   const select = document.getElementById('driverSelect');
+  // El select se reconstruye cada 5s (poll de conexion): sin esto, perdia
+  // el repartidor elegido a medio armar una ruta y saltaba al primero de
+  // la lista en cuanto se le daba "Vista previa".
+  const prevSelected = select.value;
   list.innerHTML = '';
   select.innerHTML = '';
 
@@ -137,6 +141,10 @@ async function loadDrivers() {
 
     if (d.lat && d.lng) updateDriverMarker(d.id, d.lat, d.lng, d.name);
   });
+
+  if (prevSelected && [...select.options].some((o) => o.value === prevSelected)) {
+    select.value = prevSelected;
+  }
 }
 
 async function toggleDriverActive(id, active) {
@@ -778,6 +786,8 @@ function clearPreview() {
   previewEnd = null;
   const btn = document.getElementById('confirmRouteBtn');
   if (btn) btn.style.display = 'none';
+  const invertBtn = document.getElementById('invertRouteBtn');
+  if (invertBtn) invertBtn.style.display = 'none';
   const list = document.getElementById('previewList');
   if (list) list.innerHTML = '';
 }
@@ -880,6 +890,7 @@ function redrawPreview() {
 
   renderPreviewList();
   document.getElementById('confirmRouteBtn').style.display = 'block';
+  document.getElementById('invertRouteBtn').style.display = previewOrder.length > 1 ? 'block' : 'none';
 }
 
 function renderPreviewList() {
@@ -908,6 +919,16 @@ function movePreviewStop(idx, dir) {
   const target = idx + dir;
   if (!previewOrder || target < 0 || target >= previewOrder.length) return;
   [previewOrder[idx], previewOrder[target]] = [previewOrder[target], previewOrder[idx]];
+  previewOrder.forEach((s, i) => (s.seq = i + 1));
+  redrawPreview();
+}
+
+// Da la vuelta al orden calculado (el mismo circuito, pero al reves), sin
+// tocar el punto de partida ni el final - util cuando el algoritmo elige un
+// sentido y el admin prefiere el contrario.
+function invertPreviewOrder() {
+  if (!previewOrder) return;
+  previewOrder.reverse();
   previewOrder.forEach((s, i) => (s.seq = i + 1));
   redrawPreview();
 }
