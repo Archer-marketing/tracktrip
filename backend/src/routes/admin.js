@@ -30,7 +30,7 @@ router.use(requireAdmin);
 router.get('/drivers', (req, res) => {
   const drivers = db
     .prepare(
-      `SELECT d.id, d.name, d.login_code, d.active,
+      `SELECT d.id, d.name, d.login_code, d.active, d.route_started,
               l.lat, l.lng, l.updated_at, l.stationary_since
        FROM drivers d LEFT JOIN driver_locations l ON l.driver_id = d.id`
     )

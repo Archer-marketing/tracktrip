@@ -333,9 +333,19 @@ function renderStopsList(stops) {
     const activeAssignedCount = stops.filter(
       (s) => String(s.driver_id) === String(activeTab) && s.status === 'assigned'
     ).length;
-    routeActions.innerHTML = activeAssignedCount
-      ? `<button class="btn-danger" onclick="finishRoute(${activeTab})">✅ Marcar ruta como terminada</button>`
+    const activeDriver = driversById[String(activeTab)];
+    // Mientras el repartidor no toque "Iniciar ruta" en su celular, el
+    // backend bloquea a proposito CUALQUIER alerta de Kommo para su ruta
+    // (aunque entregue pedidos) - este aviso es para que no parezca que
+    // las alertas "no funcionan" cuando en realidad estan bloqueadas.
+    const notStartedWarning = activeAssignedCount && activeDriver && !activeDriver.route_started
+      ? `<div class="route-started-warning">⚠️ ${activeDriver.name} no ha tocado "Iniciar ruta" en su celular — las alertas de Kommo (Faltan 3 / Es el siguiente) están bloqueadas hasta que lo haga.</div>`
       : '';
+    routeActions.innerHTML =
+      notStartedWarning +
+      (activeAssignedCount
+        ? `<button class="btn-danger" onclick="finishRoute(${activeTab})">✅ Marcar ruta como terminada</button>`
+        : '');
   }
 
   if (activeTab === 'pending') {
