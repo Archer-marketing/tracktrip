@@ -5,9 +5,11 @@ let watchId;
 let pollIntervalId;
 let statusIntervalId;
 let routeMap, routeMarkers = [];
+let confirmMap, confirmMarkers = [];
 let routeVisible = false;
 let myLat = null, myLng = null, myLocationMarker = null;
 let lastSentAt = null;
+let routeStarted = false;
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/driver/sw.js').catch(() => {});
@@ -108,8 +110,10 @@ function logout() {
   setStatus(false);
 
   routeVisible = false;
+  routeStarted = false;
   document.getElementById('routeSection').style.display = 'none';
   document.getElementById('toggleRouteBtn').textContent = '🗺️ Ver ruta completa';
+  hideStartRouteConfirm();
 }
 
 // Manda una lectura de ubicacion al servidor (via socket si esta conectado,
@@ -158,27 +162,111 @@ async function pollNextStop() {
   try {
     const res = await fetch(`/api/driver/next-stop/${driverId}`);
     const data = await res.json();
+    routeStarted = data.routeStarted;
     renderStop(data.stop, data.remaining);
     renderStartRouteBanner(data.stop, data.routeStarted);
     if (routeVisible) loadRouteView();
   } catch (e) { /* red caida, se reintenta en el siguiente poll */ }
 }
 
-// Mientras no toque "Iniciar ruta", no se manda ninguna alerta de Kommo
-// para su ruta (el backend la bloquea) - esto solo es el aviso/boton, el
-// repartidor puede seguir viendo/entregando pedidos normal mientras tanto.
-function renderStartRouteBanner(stop, routeStarted) {
+// Mientras no confirme "Iniciar ruta", no se manda ninguna alerta de Kommo
+// para su ruta (el backend la bloquea), tampoco puede ver la liga de Maps
+// ni marcar pedidos como entregados - el banner es el unico punto de
+// entrada a la pantalla de confirmacion (showStartRouteConfirm).
+function renderStartRouteBanner(stop, started) {
   const banner = document.getElementById('startRouteBanner');
-  banner.style.display = stop && !routeStarted ? 'block' : 'none';
+  banner.style.display = stop && !started ? 'block' : 'none';
 }
 
-async function startRoute() {
+// Pantalla de confirmacion: antes de arrancar de verdad, el repartidor ve
+// el orden completo de entrega (lista + mapa) para revisarlo con calma.
+async function showStartRouteConfirm() {
+  document.getElementById('stopCard').style.display = 'none';
+  document.getElementById('remaining').style.display = 'none';
+  document.getElementById('toggleRouteBtn').style.display = 'none';
+  document.getElementById('routeSection').style.display = 'none';
+  document.getElementById('startRouteBanner').style.display = 'none';
+  document.getElementById('startRouteConfirmScreen').style.display = 'block';
+
+  try {
+    const res = await fetch(`/api/driver/route/${driverId}`);
+    const data = await res.json();
+    renderConfirmRouteList(data.stops);
+    renderConfirmRouteMap(data.stops);
+    setTimeout(() => confirmMap && confirmMap.invalidateSize(), 100);
+  } catch (e) { /* red caida, el repartidor puede cancelar y reintentar */ }
+}
+
+function hideStartRouteConfirm() {
+  document.getElementById('startRouteConfirmScreen').style.display = 'none';
+  document.getElementById('stopCard').style.display = '';
+  document.getElementById('remaining').style.display = '';
+  document.getElementById('toggleRouteBtn').style.display = '';
+}
+
+function cancelStartRouteConfirm() {
+  hideStartRouteConfirm();
+  pollNextStop(); // el banner vuelve a aparecer, sigue sin iniciar
+}
+
+async function confirmStartRoute() {
   await fetch('/api/driver/start-route', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ driver_id: driverId }),
   });
+  hideStartRouteConfirm();
   pollNextStop();
+}
+
+function renderConfirmRouteList(stops) {
+  const list = document.getElementById('confirmRouteList');
+  if (!stops.length) {
+    list.innerHTML = '<div class="empty">No tienes pedidos asignados por ahora 🎉</div>';
+    return;
+  }
+  list.innerHTML = stops
+    .map(
+      (s) => `
+      <div class="route-item">
+        <span class="route-seq">${s.sequence}</span>
+        <span class="route-info">
+          <b>${s.name}</b><br>
+          <small>${s.address || ''}</small>
+        </span>
+      </div>
+    `
+    )
+    .join('');
+}
+
+function renderConfirmRouteMap(stops) {
+  if (!confirmMap) {
+    confirmMap = L.map('confirmRouteMap');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+    }).addTo(confirmMap);
+  }
+
+  confirmMarkers.forEach((m) => confirmMap.removeLayer(m));
+  confirmMarkers = [];
+
+  const bounds = [];
+  stops.forEach((s) => {
+    if (s.lat == null || s.lng == null) return;
+    const icon = L.divIcon({
+      html: `<div style="width:26px;height:26px;border-radius:50%;background:#2563eb;border:3px solid white;box-shadow:0 0 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;">${s.sequence}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      className: '',
+    });
+    const marker = L.marker([s.lat, s.lng], { icon }).addTo(confirmMap).bindPopup(s.name);
+    confirmMarkers.push(marker);
+    bounds.push([s.lat, s.lng]);
+  });
+
+  if (bounds.length) confirmMap.fitBounds(bounds, { padding: [30, 30] });
+  else confirmMap.setView([20.9674, -89.5926], 12);
 }
 
 // La factura puede venir como liga (la mostramos como boton) o como texto
@@ -199,24 +287,37 @@ function renderStop(stop, remaining) {
     remEl.textContent = '';
     return;
   }
+  // Sin "Iniciar ruta" confirmado, no hay liga de Maps ni boton de
+  // entregar - el backend tambien lo rechaza (ver /complete-stop), esto
+  // solo evita que aparezcan a medias.
+  const actionsHtml = routeStarted
+    ? `
+      <a class="maps-btn" style="display:block;text-align:center;text-decoration:none;color:white;border-radius:10px;padding:16px;font-weight:600;" href="${stop.mapsUrl}" target="_blank">📍 Abrir en Google Maps</a>
+      <button class="done-btn" onclick="completeStop(${stop.id})">✅ Marcar como entregado</button>
+    `
+    : `<p class="locked-note">🔒 Toca "Iniciar ruta" arriba para ver el mapa y poder marcar como entregado.</p>`;
+
   card.innerHTML = `
     <div class="card">
       <h2>${stop.name}</h2>
       <p>${stop.address || 'Sin dirección registrada'}</p>
       ${invoiceHtml(stop.invoice)}
-      <a class="maps-btn" style="display:block;text-align:center;text-decoration:none;color:white;border-radius:10px;padding:16px;font-weight:600;" href="${stop.mapsUrl}" target="_blank">📍 Abrir en Google Maps</a>
-      <button class="done-btn" onclick="completeStop(${stop.id})">✅ Marcar como entregado</button>
+      ${actionsHtml}
     </div>
   `;
   remEl.textContent = `Paradas restantes: ${remaining}`;
 }
 
 async function completeStop(stopId) {
-  await fetch('/api/driver/complete-stop', {
+  const res = await fetch('/api/driver/complete-stop', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ stop_id: stopId }),
   });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'No se pudo marcar como entregado');
+  }
   pollNextStop();
 }
 
@@ -264,7 +365,7 @@ function renderRouteList(stops) {
             ${s.invoice && !invoiceIsLink ? `<br><small>🧾 ${s.invoice}</small>` : ''}
           </span>
           ${invoiceIsLink ? `<a class="route-link" href="${s.invoice}" target="_blank">🧾</a>` : ''}
-          <a class="route-link" href="${s.mapsUrl}" target="_blank">📍</a>
+          ${routeStarted ? `<a class="route-link" href="${s.mapsUrl}" target="_blank">📍</a>` : ''}
         </div>
       `;
     })

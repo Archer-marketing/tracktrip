@@ -41,7 +41,11 @@ router.get('/next-stop/:driverId', (req, res) => {
     .prepare(`SELECT COUNT(*) as n FROM stops WHERE driver_id = ? AND status = 'assigned'`)
     .get(driverId).n;
 
-  const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving`;
+  // Sin liga de Maps hasta que confirme "Iniciar ruta" (ver tambien
+  // /complete-stop, que rechaza la entrega por la misma razon).
+  const mapsUrl = routeStarted
+    ? `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving`
+    : null;
 
   res.json({ stop: { ...stop, mapsUrl }, remaining, routeStarted });
 });
@@ -65,6 +69,9 @@ router.post('/start-route', (req, res) => {
 // util si un cliente no esta y prefiere saltarlo y volver despues.
 router.get('/route/:driverId', (req, res) => {
   const { driverId } = req.params;
+  const driver = db.prepare('SELECT route_started FROM drivers WHERE id = ?').get(driverId);
+  const routeStarted = !!(driver && driver.route_started);
+
   const stops = db
     .prepare(
       `SELECT s.id, s.status, s.sequence, c.name, c.address, c.lat, c.lng, c.invoice
@@ -77,10 +84,12 @@ router.get('/route/:driverId', (req, res) => {
 
   const withMaps = stops.map((s) => ({
     ...s,
-    mapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}&travelmode=driving`,
+    mapsUrl: routeStarted
+      ? `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}&travelmode=driving`
+      : null,
   }));
 
-  res.json({ stops: withMaps });
+  res.json({ stops: withMaps, routeStarted });
 });
 
 router.post('/complete-stop', (req, res) => {
@@ -92,6 +101,15 @@ router.post('/complete-stop', (req, res) => {
        WHERE s.id = ?`
     )
     .get(stop_id);
+  if (!stop) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+  // No se puede marcar como entregado sin antes confirmar "Iniciar ruta"
+  // (misma regla que bloquea las alertas de Kommo y la liga de Maps).
+  const driver = db.prepare('SELECT route_started FROM drivers WHERE id = ?').get(stop.driver_id);
+  if (!driver || !driver.route_started) {
+    return res.status(403).json({ error: 'Primero tienes que confirmar el inicio de la ruta' });
+  }
+
   db.prepare(`UPDATE stops SET status = 'delivered', delivered_at = datetime('now') WHERE id = ?`).run(
     stop_id
   );
