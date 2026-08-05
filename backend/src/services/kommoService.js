@@ -65,6 +65,39 @@ async function markLeadDelivered(leadId) {
   return throttledKommoCall(() => client.patch(`/leads/${leadId}`, body));
 }
 
+// Deja solo digitos y se queda con los ultimos 10 (ignora "+52", "01",
+// lada larga, espacios/guiones, etc. - asi comparamos numeros mexicanos
+// sin importar como los haya guardado cada sistema).
+function normalizePhone(raw) {
+  if (!raw) return '';
+  const digits = String(raw).replace(/\D/g, '');
+  return digits.slice(-10);
+}
+
+// Busca en Kommo un lead cuyo contacto tenga ese telefono (comparando solo
+// los ultimos 10 digitos). Se usa para conciliar facturas de Zoho Books
+// con leads de Kommo. Devuelve el primer lead_id que haga match, o null.
+async function findLeadByPhone(phone) {
+  const last10 = normalizePhone(phone);
+  if (!last10) return null;
+
+  const client = kommoClient();
+  const { data } = await throttledKommoCall(() =>
+    client.get('/contacts', { params: { query: last10, with: 'leads', limit: 25 } })
+  );
+  const contacts = data?._embedded?.contacts || [];
+
+  for (const contact of contacts) {
+    const phoneField = (contact.custom_fields_values || []).find((f) => f.field_code === 'PHONE');
+    const matches = (phoneField?.values || []).some((v) => normalizePhone(v.value) === last10);
+    if (!matches) continue;
+
+    const leads = contact._embedded?.leads || [];
+    if (leads.length) return leads[0].id;
+  }
+  return null;
+}
+
 // Embudos (pipelines) y etapas (statuses) de la cuenta, para el selector del panel.
 async function getPipelines() {
   const client = kommoClient();
@@ -296,4 +329,5 @@ module.exports = {
   updateLeadTrackingField,
   runSalesbot,
   markLeadDelivered,
+  findLeadByPhone,
 };

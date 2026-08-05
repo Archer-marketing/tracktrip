@@ -68,10 +68,17 @@ KOMMO_BOT_3_AWAY_ID=103880
 KOMMO_BOT_NEXT_ID=103878
 KOMMO_DELIVERED_STATUS_ID=
 KOMMO_DELIVERED_PIPELINE_ID=
+ZOHO_CLIENT_ID=
+ZOHO_CLIENT_SECRET=
+ZOHO_REFRESH_TOKEN=
+ZOHO_ORGANIZATION_ID=
+ZOHO_ACCOUNTS_DOMAIN=https://accounts.zoho.com
+ZOHO_API_DOMAIN=https://www.zohoapis.com
 ```
 (`PORT` y `SQLITE_PATH` ya vienen fijos en el `Dockerfile`/`docker-compose.yml`,
 no hace falta tocarlos). Ver la sección **"Configurar Kommo"** más abajo para
-saber cómo sacar `KOMMO_ADDRESS_FIELD_ID` y `KOMMO_STATUS_ID`.
+saber cómo sacar `KOMMO_ADDRESS_FIELD_ID` y `KOMMO_STATUS_ID`, y **"Configurar
+Zoho Books"** para las variables `ZOHO_*`.
 
 Guarda y haz **Deploy**. Con eso ya tienes `https://reparto.tuempresa.com/admin`
 y `https://reparto.tuempresa.com/driver` funcionando con HTTPS.
@@ -181,13 +188,10 @@ pm2 startup
    - **"Kommo: embudo y etapa"** — elige en qué embudo/etapa están los
      pedidos listos para entregar (opcional, si no eliges nada sincroniza
      todos los leads abiertos).
-   - **"Kommo: campo (dirección o liga de Maps)"** — elige cuál de tus
-     campos personalizados de lead trae la ubicación de entrega. Sirve el
-     mismo campo sea lo que sea que tengas ahí: dirección en texto, un
-     link completo de Google Maps, uno acortado (`maps.app.goo.gl/...`),
-     o `"lat,lng"` plano — el sistema detecta automáticamente cuál es y
-     saca las coordenadas (o geocodifica si es texto de dirección). Se
-     guarda solo al elegirlo, no hace falta darle a ningún botón.
+   - El campo con la ubicación de entrega (dirección en texto, link
+     completo de Google Maps, uno acortado `maps.app.goo.gl/...`, o
+     `"lat,lng"` plano — se detecta automático cuál es) ya no se elige en
+     el panel, es fijo por `KOMMO_ADDRESS_FIELD_ID` / `KOMMO_LATLNG_FIELD_ID`.
    - **"Kommo: campo de factura (opcional)"** — si tienes un campo con la
      factura del pedido (una liga a un PDF/imagen, o solo un número de
      factura en texto), elígelo aquí. Se le va a mostrar al repartidor
@@ -201,6 +205,52 @@ en Kommo con ese filtro), los pendientes que ya no correspondan se
 quitan solos en el siguiente sync — no se acumulan. Esto solo aplica a
 pendientes sin asignar; un pedido ya asignado a un repartidor o ya
 entregado nunca se toca.
+
+---
+
+## Configurar Zoho Books
+Esto es opcional — sirve para preasignar pedidos automáticamente a un
+repartidor a partir de las **facturas del día** en Zoho Books, usando el
+campo **vendedor** de cada factura (ej. "cuando factura JEFREE, el pedido
+es de Luis"). Encuentra al cliente en Kommo buscando por los últimos 10
+dígitos de su teléfono (para no fallar por "+52", ceros a la izquierda,
+etc.) y lo asigna directo a la ruta de ese repartidor — queda igual de
+editable después (reasignar, mover, quitar) que cualquier otro pedido.
+
+1. Necesitas generar credenciales de API en la
+   [Consola de API de Zoho](https://api-console.zoho.com/) (con la misma
+   cuenta que usa Zoho Books):
+   - Crea un cliente tipo **"Self Client"**.
+   - En la pestaña "Generate Code", pide el scope
+     `ZohoBooks.invoices.READ,ZohoBooks.contacts.READ,ZohoBooks.settings.READ`
+     y genera un código (dura pocos minutos, úsalo rápido).
+   - Cambia ese código por un `refresh_token` de larga duración (esto se
+     hace una sola vez, con una llamada tipo):
+     ```
+     curl -X POST https://accounts.zoho.com/oauth/v2/token \
+       -d "grant_type=authorization_code" \
+       -d "client_id=TU_CLIENT_ID" \
+       -d "client_secret=TU_CLIENT_SECRET" \
+       -d "code=EL_CODIGO_GENERADO"
+     ```
+     La respuesta trae `refresh_token` — ese es el que se queda fijo en
+     `ZOHO_REFRESH_TOKEN` (el `access_token` es temporal, la app lo renueva
+     sola).
+2. `ZOHO_ORGANIZATION_ID` es el ID de tu organización en Zoho Books
+   (aparece en la URL cuando entras a Zoho Books, o en Ajustes > Perfil de
+   la organización).
+3. Si tu cuenta de Zoho está en otro centro de datos (Zoho.eu, Zoho.in,
+   etc.), ajusta `ZOHO_ACCOUNTS_DOMAIN` y `ZOHO_API_DOMAIN` — para la
+   mayoría de las cuentas (incluida México) los valores por defecto ya
+   son correctos.
+4. Configura las 5 variables `ZOHO_*` en Easypanel y haz deploy. En el
+   panel (`/admin`) verás **"Zoho: vendedores → repartidores"** con la
+   lista de vendedores de tu cuenta — asocia cada uno con su repartidor
+   (puede quedar sin asociar si ese vendedor no reparte).
+5. Dale a **"🔄 Preasignar pedidos de Zoho (hoy)"** cuando quieras correr
+   la conciliación. Si una factura no encuentra lead en Kommo, aparece en
+   una lista con botones **"Ir a Kommo"** (para buscarlo/crearlo a mano)
+   o **"Ignorar"** — no se crea nada solo en ese caso.
 
 ---
 

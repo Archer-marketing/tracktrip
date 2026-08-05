@@ -106,6 +106,17 @@ try {
   db.exec(`ALTER TABLE driver_locations ADD COLUMN stationary_since TEXT`);
 } catch (e) {}
 
+// Mapeo de vendedor de Zoho Books -> repartidor de esta app (los nombres
+// no siempre coinciden, por eso es un mapeo explicito y no por nombre).
+db.exec(`
+CREATE TABLE IF NOT EXISTS salesperson_driver_map (
+  zoho_salesperson_id TEXT PRIMARY KEY,
+  zoho_salesperson_name TEXT,
+  driver_id INTEGER,
+  FOREIGN KEY (driver_id) REFERENCES drivers(id)
+);
+`);
+
 // Punto de partida por defecto para armar rutas (ej. la oficina/bodega).
 // Se deja precargado con esta liga solo la primera vez; si el admin la
 // cambia despues desde el panel, no se vuelve a pisar.

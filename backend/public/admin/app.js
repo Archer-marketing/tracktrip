@@ -58,6 +58,7 @@ async function init() {
   await loadKommoPipelines();
   await loadKommoFields();
   await loadMonitorLink();
+  await loadZohoSalespersons();
 
   const socket = io();
   socket.on('admin:driverUpdate', ({ driver_id, lat, lng }) => {
@@ -700,6 +701,102 @@ async function saveInvoiceField(silent) {
     body: JSON.stringify({ invoice_field_id }),
   });
   if (!silent) alert('Guardado. La proxima sincronizacion usara este campo para la factura.');
+}
+
+// --- Zoho Books: mapeo de vendedores + preasignacion de pedidos del dia ---
+
+async function loadZohoSalespersons() {
+  const container = document.getElementById('zohoSalespersons');
+  try {
+    const salespersons = await api('/api/admin/zoho/salespersons');
+    if (!salespersons.length) {
+      container.innerHTML = '<div class="pin-label">No se encontraron vendedores en Zoho.</div>';
+      return;
+    }
+    const activeDrivers = Object.values(driversById).filter((d) => d.active);
+    container.innerHTML = salespersons
+      .map(
+        (s) => `
+        <div class="zoho-salesperson-row">
+          <span class="name">${s.name}</span>
+          <select onchange="mapZohoSalesperson('${s.id}', this.value, '${s.name.replace(/'/g, "\\'")}')">
+            <option value="">(sin repartidor)</option>
+            ${activeDrivers
+              .map((d) => `<option value="${d.id}" ${String(d.id) === String(s.driver_id) ? 'selected' : ''}>${d.name}</option>`)
+              .join('')}
+          </select>
+        </div>
+      `
+      )
+      .join('');
+  } catch (e) {
+    container.innerHTML = '<div class="pin-label">No se pudieron cargar los vendedores de Zoho.</div>';
+    console.error(e);
+  }
+}
+
+async function mapZohoSalesperson(salespersonId, driverId, salespersonName) {
+  await api(`/api/admin/zoho/salespersons/${salespersonId}/map`, {
+    method: 'POST',
+    body: JSON.stringify({ driver_id: driverId || null, salesperson_name: salespersonName }),
+  });
+}
+
+function ignoreZohoNotFound(el) {
+  el.closest('.zoho-notfound-item').remove();
+}
+
+async function syncZoho() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Sincronizando...';
+  const results = document.getElementById('zohoSyncResults');
+  try {
+    const result = await api('/api/admin/zoho/sync', { method: 'POST' });
+    if (result.error) {
+      results.innerHTML = `<div class="zoho-error">${result.error}</div>`;
+    } else {
+      let html = `<div class="zoho-summary">✅ ${result.preassigned} pedido(s) preasignado(s).</div>`;
+
+      if (result.unmapped && result.unmapped.length) {
+        html += result.unmapped
+          .map(
+            (u) =>
+              `<div class="zoho-warning">⚠️ El vendedor "${u.salesperson_name}" no tiene repartidor asignado (${u.count} factura(s) sin preasignar).</div>`
+          )
+          .join('');
+      }
+
+      if (result.errors && result.errors.length) {
+        html += result.errors.map((e) => `<div class="zoho-error">${e}</div>`).join('');
+      }
+
+      if (result.notFound && result.notFound.length) {
+        html += `<div class="zoho-summary">🔍 ${result.notFound.length} factura(s) sin lead de Kommo encontrado:</div>`;
+        html += result.notFound
+          .map(
+            (n) => `
+            <div class="zoho-notfound-item">
+              <b>${n.customer_name}</b> — ${n.invoice_number}<br>
+              <small>Tel: ${n.phone || '(sin telefono)'}</small>
+              <div class="actions">
+                ${result.kommoLeadsUrl ? `<a href="${result.kommoLeadsUrl}" target="_blank" rel="noopener"><button>Ir a Kommo</button></a>` : ''}
+                <button class="ignore-btn" onclick="ignoreZohoNotFound(this)">Ignorar</button>
+              </div>
+            </div>
+          `
+          )
+          .join('');
+      }
+
+      results.innerHTML = html;
+      await loadStops();
+    }
+  } catch (e) {
+    results.innerHTML = `<div class="zoho-error">Error al sincronizar: ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = '🔄 Preasignar pedidos de Zoho (hoy)';
 }
 
 // Una alerta especifica ("3_away" o "next") de un pedido. Desmarcarla la

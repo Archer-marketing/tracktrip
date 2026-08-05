@@ -9,7 +9,9 @@ const {
   getLeadCustomFields,
   getSyncInvoiceFieldConfig,
   setSyncInvoiceFieldConfig,
+  findLeadByPhone,
 } = require('../services/kommoService');
+const { getSalespersons, getTodayInvoices, getContactPhone } = require('../services/zohoService');
 const { optimizeRoute } = require('../services/routingService');
 const { createTrackingLinksForStops } = require('../services/trackingService');
 const { getDefaultStartPoint, setDefaultStartPoint } = require('../services/startPointService');
@@ -431,6 +433,141 @@ router.post('/stops/:id/alert', (req, res) => {
   }
 
   res.json({ ok: true });
+});
+
+// --- Zoho Books: vendedores y preasignacion por factura del dia ---
+
+// Vendedores de Zoho con el repartidor que tengan mapeado (si alguno), para
+// el selector del panel. El mapeo es explicito porque el nombre del
+// vendedor en Zoho no siempre coincide con el nombre del repartidor aqui.
+router.get('/zoho/salespersons', async (req, res) => {
+  try {
+    const salespersons = await getSalespersons();
+    const mapRows = db.prepare('SELECT zoho_salesperson_id, driver_id FROM salesperson_driver_map').all();
+    const driverBySalesperson = Object.fromEntries(mapRows.map((r) => [r.zoho_salesperson_id, r.driver_id]));
+    res.json(salespersons.map((s) => ({ ...s, driver_id: driverBySalesperson[s.id] || null })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/zoho/salespersons/:id/map', (req, res) => {
+  const { id } = req.params;
+  const { driver_id, salesperson_name } = req.body;
+  db.prepare(
+    `INSERT INTO salesperson_driver_map (zoho_salesperson_id, zoho_salesperson_name, driver_id)
+     VALUES (?, ?, ?)
+     ON CONFLICT(zoho_salesperson_id) DO UPDATE SET
+       zoho_salesperson_name = excluded.zoho_salesperson_name, driver_id = excluded.driver_id`
+  ).run(id, salesperson_name || null, driver_id || null);
+  res.json({ ok: true });
+});
+
+// Trae las facturas de HOY de Zoho Books, y por cada una: si el vendedor
+// tiene repartidor mapeado, busca el lead de Kommo por telefono (ultimos
+// 10 digitos) y lo preasigna directo a la ruta de ese repartidor (al
+// final, con secuencia) - queda igual de editable que cualquier otro
+// pedido asignado (reasignar/mover/quitar). Si no encuentra el lead, se
+// reporta en "notFound" para que el admin decida (no se crea nada solo).
+router.post('/zoho/sync', async (req, res) => {
+  try {
+    const invoices = await getTodayInvoices();
+
+    const mapRows = db.prepare('SELECT zoho_salesperson_id, driver_id FROM salesperson_driver_map').all();
+    const driverBySalesperson = Object.fromEntries(
+      mapRows.filter((r) => r.driver_id).map((r) => [r.zoho_salesperson_id, r.driver_id])
+    );
+
+    const results = { preassigned: 0, unmapped: [], notFound: [], errors: [] };
+    const unmappedBySalesperson = new Map();
+    const phoneCache = new Map();
+    const maxSeqCache = new Map();
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+    for (const invoice of invoices) {
+      const driverId = driverBySalesperson[invoice.salesperson_id];
+      if (!driverId) {
+        if (!unmappedBySalesperson.has(invoice.salesperson_id)) {
+          unmappedBySalesperson.set(invoice.salesperson_id, {
+            salesperson_id: invoice.salesperson_id,
+            salesperson_name: invoice.salesperson_name,
+            count: 0,
+          });
+        }
+        unmappedBySalesperson.get(invoice.salesperson_id).count++;
+        continue;
+      }
+
+      let phone = phoneCache.get(invoice.customer_id);
+      if (phone === undefined) {
+        try {
+          phone = await getContactPhone(invoice.customer_id);
+        } catch (err) {
+          phone = '';
+        }
+        phoneCache.set(invoice.customer_id, phone);
+      }
+
+      let leadId = null;
+      try {
+        leadId = phone ? await findLeadByPhone(phone) : null;
+      } catch (err) {
+        results.errors.push(`Factura ${invoice.invoice_number}: error buscando en Kommo (${err.message})`);
+        continue;
+      }
+
+      if (!leadId) {
+        results.notFound.push({
+          invoice_number: invoice.invoice_number,
+          customer_name: invoice.customer_name,
+          phone,
+        });
+        continue;
+      }
+
+      try {
+        // Asegura que el lead ya exista como customer + stop pendiente
+        // (mismo flujo que "agregar pedido manual por ID de lead").
+        await addLeadById(leadId);
+      } catch (err) {
+        results.errors.push(`Factura ${invoice.invoice_number} (lead ${leadId}): ${err.message}`);
+        continue;
+      }
+
+      const customer = db.prepare('SELECT id FROM customers WHERE kommo_lead_id = ?').get(String(leadId));
+      const stop =
+        customer &&
+        db.prepare(`SELECT id FROM stops WHERE customer_id = ? AND status = 'pending'`).get(customer.id);
+      if (!stop) continue; // ya estaba asignado/entregado (de otro sync o a mano) - no se toca
+
+      if (!maxSeqCache.has(driverId)) {
+        const row = db
+          .prepare(`SELECT MAX(sequence) as maxSeq FROM stops WHERE driver_id = ? AND status = 'assigned'`)
+          .get(driverId);
+        maxSeqCache.set(driverId, row.maxSeq || 0);
+      }
+      const nextSeq = maxSeqCache.get(driverId) + 1;
+      maxSeqCache.set(driverId, nextSeq);
+
+      db.prepare(
+        `UPDATE stops SET driver_id = ?, sequence = ?, status = 'assigned', assigned_at = datetime('now') WHERE id = ?`
+      ).run(driverId, nextSeq, stop.id);
+      results.preassigned++;
+
+      createTrackingLinksForStops(baseUrl, [stop.id])
+        .then(() => checkBotTriggersForDriver(driverId))
+        .catch((err) => {
+          console.error('Error generando liga/alertas tras preasignar de Zoho:', err.message);
+        });
+    }
+
+    results.unmapped = [...unmappedBySalesperson.values()];
+    const subdomain = process.env.KOMMO_SUBDOMAIN;
+    results.kommoLeadsUrl = subdomain ? `https://${subdomain}.kommo.com/leads/list` : null;
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
