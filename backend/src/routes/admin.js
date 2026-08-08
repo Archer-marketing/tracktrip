@@ -355,6 +355,16 @@ router.post('/stops/:id/unassign', (req, res) => {
   res.json({ ok: true });
 });
 
+// Quita un pedido pendiente por completo (ej. un duplicado que se creo por
+// error al sincronizar). Solo aplica a 'pending' - un pedido asignado usa
+// unassign, y uno entregado nunca se borra (es historial).
+router.delete('/stops/:id', (req, res) => {
+  const { id } = req.params;
+  const info = db.prepare(`DELETE FROM stops WHERE id = ? AND status = 'pending'`).run(id);
+  if (!info.changes) return res.status(404).json({ error: 'Pedido no encontrado o ya no esta pendiente' });
+  res.json({ ok: true });
+});
+
 // Cambia un pedido ya asignado a otro repartidor (sin pasar por Pendientes).
 // Se agrega al final de la ruta del repartidor nuevo. Como el conteo de
 // "cuantos faltan" cambia en AMBAS rutas (la que lo pierde y la que lo

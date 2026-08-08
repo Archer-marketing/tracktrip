@@ -368,6 +368,9 @@ function renderStopsList(stops) {
               ${hasLocation ? '' : '<small class="stop-warn">⚠️ Sin ubicación — corrige el lead en Kommo y vuelve a sincronizar</small><br>'}
               ${s.kommo_url ? `<a href="${s.kommo_url}" target="_blank" rel="noopener">Ver en Kommo →</a>` : ''}
             </span>
+            <span class="stop-actions">
+              <button class="mini-btn remove" onclick="deletePendingStop(${s.id})">✖</button>
+            </span>
           </label>
           ${alertCheckboxesHtml(s)}
         `;
@@ -591,6 +594,14 @@ async function reassignStop(stopId, newDriverId) {
     body: JSON.stringify({ driver_id: newDriverId }),
   });
   if (result.error) return alert(result.error);
+  await loadStops();
+}
+
+async function deletePendingStop(stopId) {
+  if (!confirm('¿Quitar este pedido de Pendientes? No se puede deshacer (si vuelve a aparecer en Kommo, se vuelve a sincronizar).')) return;
+  const result = await api(`/api/admin/stops/${stopId}`, { method: 'DELETE' });
+  if (result.error) return alert(result.error);
+  selectedStops.delete(stopId);
   await loadStops();
 }
 

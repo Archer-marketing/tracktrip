@@ -176,8 +176,11 @@ function customerStatements() {
         lat=excluded.lat, lng=excluded.lng, phone=excluded.phone, invoice=excluded.invoice
     `),
     findCustomerId: db.prepare(`SELECT id FROM customers WHERE kommo_lead_id = ?`),
-    hasPendingStop: db.prepare(
+    hasActiveStop: db.prepare(
       `SELECT id FROM stops WHERE customer_id = ? AND status IN ('pending','assigned')`
+    ),
+    hasDeliveredStop: db.prepare(
+      `SELECT id FROM stops WHERE customer_id = ? AND status = 'delivered'`
     ),
     insertStop: db.prepare(`INSERT INTO stops (customer_id, status) VALUES (?, 'pending')`),
   };
@@ -186,9 +189,16 @@ function customerStatements() {
 // Procesa un lead (geocodifica/guarda como customer + stop pendiente).
 // Compartido por syncFromKommo (varios leads de un filtro) y addLeadById
 // (un lead especifico agregado a mano, sin importar el filtro/etapa).
-async function processLead(lead, fieldIds, statements, results) {
+// `forceNewStop` (solo lo usa addLeadById) crea el pendiente aunque este
+// mismo lead ya se haya entregado antes - es una accion explicita del
+// admin, se asume que sabe que quiere repetirlo. El sync automatico NUNCA
+// lo fuerza: si el lead se queda pegado en la misma etapa de Kommo despues
+// de entregarse (no se movio a otra etapa), no hay que recrearlo pendiente
+// cada vez que se sincroniza - por eso el bug de "los ya entregados se
+// vuelven a aparecer" en cada sync.
+async function processLead(lead, fieldIds, statements, results, { forceNewStop = false } = {}) {
   const { field_id, invoice_field_id } = fieldIds;
-  const { insertCustomer, findCustomerId, hasPendingStop, insertStop } = statements;
+  const { insertCustomer, findCustomerId, hasActiveStop, hasDeliveredStop, insertStop } = statements;
 
   try {
     const raw = extractCustomField(lead, field_id);
@@ -233,7 +243,7 @@ async function processLead(lead, fieldIds, statements, results) {
     });
 
     const customer = findCustomerId.get(String(lead.id));
-    if (customer && !hasPendingStop.get(customer.id)) {
+    if (customer && !hasActiveStop.get(customer.id) && (forceNewStop || !hasDeliveredStop.get(customer.id))) {
       insertStop.run(customer.id);
     }
     results.synced++;
@@ -312,7 +322,11 @@ async function addLeadById(leadId) {
   const fieldIds = { field_id: getSyncFieldConfig().field_id, invoice_field_id: getSyncInvoiceFieldConfig().invoice_field_id };
   const results = { synced: 0, geocoded: 0, skipped: 0, errors: [] };
 
-  await processLead(lead, fieldIds, statements, results);
+  // forceNewStop: es una accion puntual y explicita (el admin escribio
+  // este lead a mano, o el sync de Zoho lo encontro por una factura de
+  // HOY) - a diferencia del sync automatico masivo, aqui SI tiene sentido
+  // crear el pendiente aunque este mismo lead ya se haya entregado antes.
+  await processLead(lead, fieldIds, statements, results, { forceNewStop: true });
   return results;
 }
 
