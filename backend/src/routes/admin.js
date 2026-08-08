@@ -186,7 +186,7 @@ router.get('/stops', (req, res) => {
               s.notified_3_away, s.notified_next,
               c.id as customer_id, c.name, c.address, c.lat, c.lng, c.kommo_lead_id
        FROM stops s JOIN customers c ON c.id = s.customer_id
-       WHERE s.status != 'delivered' OR date(s.delivered_at) = date('now')
+       WHERE s.status != 'delivered' OR date(s.delivered_at, 'localtime') = date('now', 'localtime')
        ORDER BY s.driver_id, s.sequence`
     )
     .all();

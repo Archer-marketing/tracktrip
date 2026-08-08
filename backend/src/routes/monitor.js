@@ -20,7 +20,7 @@ router.get('/data', (req, res) => {
     `SELECT s.driver_id, s.id, s.status, s.sequence, c.name, c.lat, c.lng
      FROM stops s JOIN customers c ON c.id = s.customer_id
      WHERE s.driver_id = ?
-       AND (s.status = 'assigned' OR (s.status = 'delivered' AND date(s.delivered_at) = date('now')))
+       AND (s.status = 'assigned' OR (s.status = 'delivered' AND date(s.delivered_at, 'localtime') = date('now', 'localtime')))
      ORDER BY s.sequence ASC`
   );
 
