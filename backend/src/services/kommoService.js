@@ -243,8 +243,13 @@ async function processLead(lead, fieldIds, statements, results, { forceNewStop =
     });
 
     const customer = findCustomerId.get(String(lead.id));
-    if (customer && !hasActiveStop.get(customer.id) && (forceNewStop || !hasDeliveredStop.get(customer.id))) {
-      insertStop.run(customer.id);
+    if (customer && !hasActiveStop.get(customer.id)) {
+      if (forceNewStop || !hasDeliveredStop.get(customer.id)) {
+        insertStop.run(customer.id);
+        if (results.newStops != null) results.newStops++;
+      } else if (results.alreadyDelivered != null) {
+        results.alreadyDelivered++;
+      }
     }
     results.synced++;
   } catch (err) {
@@ -273,7 +278,7 @@ async function syncFromKommo() {
 
   const statements = customerStatements();
   const fieldIds = { field_id: getSyncFieldConfig().field_id, invoice_field_id: getSyncInvoiceFieldConfig().invoice_field_id };
-  const results = { synced: 0, geocoded: 0, skipped: 0, removed: 0, errors: [] };
+  const results = { synced: 0, newStops: 0, alreadyDelivered: 0, geocoded: 0, skipped: 0, removed: 0, errors: [] };
   const syncedLeadIds = new Set();
 
   for (const lead of leads) {

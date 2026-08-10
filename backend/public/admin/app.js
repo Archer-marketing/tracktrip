@@ -827,7 +827,10 @@ async function syncKommo() {
   btn.textContent = 'Sincronizando...';
   try {
     const result = await api('/api/admin/sync-kommo', { method: 'POST' });
-    let msg = `Sincronizados: ${result.synced}, geocodificados: ${result.geocoded}, con error: ${result.skipped}, quitados: ${result.removed || 0}`;
+    let msg = `Revisados: ${result.synced}, pedidos nuevos: ${result.newStops ?? result.synced}, geocodificados: ${result.geocoded}, con error: ${result.skipped}, quitados: ${result.removed || 0}`;
+    if (result.alreadyDelivered) {
+      msg += `\n(${result.alreadyDelivered} ya estaban entregados antes y no se repitieron)`;
+    }
     if (result.errors && result.errors.length) {
       msg += `\n\nPrimeros errores:\n${result.errors.slice(0, 5).join('\n')}`;
     }
