@@ -179,8 +179,8 @@ function customerStatements() {
     hasActiveStop: db.prepare(
       `SELECT id FROM stops WHERE customer_id = ? AND status IN ('pending','assigned')`
     ),
-    hasDeliveredStop: db.prepare(
-      `SELECT id FROM stops WHERE customer_id = ? AND status = 'delivered'`
+    lastDeliveredStop: db.prepare(
+      `SELECT delivered_at FROM stops WHERE customer_id = ? AND status = 'delivered' ORDER BY delivered_at DESC LIMIT 1`
     ),
     insertStop: db.prepare(`INSERT INTO stops (customer_id, status) VALUES (?, 'pending')`),
   };
@@ -189,16 +189,17 @@ function customerStatements() {
 // Procesa un lead (geocodifica/guarda como customer + stop pendiente).
 // Compartido por syncFromKommo (varios leads de un filtro) y addLeadById
 // (un lead especifico agregado a mano, sin importar el filtro/etapa).
-// `forceNewStop` (solo lo usa addLeadById) crea el pendiente aunque este
-// mismo lead ya se haya entregado antes - es una accion explicita del
-// admin, se asume que sabe que quiere repetirlo. El sync automatico NUNCA
-// lo fuerza: si el lead se queda pegado en la misma etapa de Kommo despues
-// de entregarse (no se movio a otra etapa), no hay que recrearlo pendiente
-// cada vez que se sincroniza - por eso el bug de "los ya entregados se
-// vuelven a aparecer" en cada sync.
+// Si el lead ya se entrego antes, solo se vuelve a crear como pendiente
+// si Kommo lo registra como modificado DESPUES de esa entrega (updated_at
+// del lead > delivered_at del stop) - eso es lo que pasa cuando alguien
+// toca el lead para reflejar un pedido nuevo (cambia de etapa, actualiza
+// un campo, etc). Si nadie lo toco despues de entregarlo, es el mismo
+// lead viejo pegado en la misma etapa y no hay que duplicarlo cada sync.
+// `forceNewStop` (solo lo usa addLeadById) salta esta comparacion y crea
+// el pendiente siempre - es una accion explicita y puntual del admin.
 async function processLead(lead, fieldIds, statements, results, { forceNewStop = false } = {}) {
   const { field_id, invoice_field_id } = fieldIds;
-  const { insertCustomer, findCustomerId, hasActiveStop, hasDeliveredStop, insertStop } = statements;
+  const { insertCustomer, findCustomerId, hasActiveStop, lastDeliveredStop, insertStop } = statements;
 
   try {
     const raw = extractCustomField(lead, field_id);
@@ -244,7 +245,14 @@ async function processLead(lead, fieldIds, statements, results, { forceNewStop =
 
     const customer = findCustomerId.get(String(lead.id));
     if (customer && !hasActiveStop.get(customer.id)) {
-      if (forceNewStop || !hasDeliveredStop.get(customer.id)) {
+      const lastDelivered = lastDeliveredStop.get(customer.id);
+      const reordered =
+        lastDelivered &&
+        lead.updated_at &&
+        new Date(lead.updated_at * 1000).getTime() >
+          new Date(lastDelivered.delivered_at.replace(' ', 'T') + 'Z').getTime();
+
+      if (forceNewStop || !lastDelivered || reordered) {
         insertStop.run(customer.id);
         if (results.newStops != null) results.newStops++;
       } else if (results.alreadyDelivered != null) {
