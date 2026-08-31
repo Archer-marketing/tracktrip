@@ -201,6 +201,27 @@ router.get('/stops', (req, res) => {
   res.json(withKommoUrl);
 });
 
+// Ultimo numero de parada que ya trae ese repartidor HOY (asignadas +
+// entregadas hoy) - para que una ruta nueva/reasignada no empiece de
+// nuevo en 1 y choque con las paradas ya entregadas (se veian
+// intercaladas en la lista al ordenar por numero). Entregas de dias
+// anteriores no cuentan, asi cada dia arranca limpio en 1. `excludeStopIds`
+// deja fuera del calculo los stops que se estan por renumerar en esta
+// misma operacion (ej. al reordenar/editar una ruta ya activa), para no
+// contarlos dos veces y que siga arrancando en 1 en ese caso.
+function nextSequenceForDriverToday(driverId, excludeStopIds = []) {
+  const placeholders = excludeStopIds.length ? excludeStopIds.map(() => '?').join(',') : null;
+  const row = db
+    .prepare(
+      `SELECT MAX(sequence) as maxSeq FROM stops
+       WHERE driver_id = ?
+         ${placeholders ? `AND id NOT IN (${placeholders})` : ''}
+         AND (status = 'assigned' OR (status = 'delivered' AND date(delivered_at, 'localtime') = date('now', 'localtime')))`
+    )
+    .get(driverId, ...excludeStopIds);
+  return row.maxSeq || 0;
+}
+
 // Resuelve el punto de partida (pin/cliente resuelto ya en el frontend, o
 // la ubicacion actual del repartidor si no se manda `start`) y los stops
 // con ubicacion valida, compartido por preview-route y assign-route.
@@ -268,11 +289,12 @@ router.post('/assign-route', (req, res) => {
     return res.status(400).json({ error: 'Faltan datos' });
   }
 
+  const startSeq = nextSequenceForDriverToday(driver_id, ordered_stop_ids);
   const update = db.prepare(
     `UPDATE stops SET driver_id = ?, sequence = ?, status = 'assigned', assigned_at = datetime('now') WHERE id = ?`
   );
   const tx = db.transaction((ids) => {
-    ids.forEach((id, idx) => update.run(driver_id, idx + 1, id));
+    ids.forEach((id, idx) => update.run(driver_id, startSeq + idx + 1, id));
     // Ruta nueva/actualizada: el repartidor tiene que volver a tocar
     // "Iniciar ruta" antes de que se dispare cualquier alerta.
     db.prepare('UPDATE drivers SET route_started = 0 WHERE id = ?').run(driver_id);
@@ -384,10 +406,7 @@ router.post('/stops/:id/reassign', (req, res) => {
 
   if (Number(driver_id) === Number(stop.driver_id)) return res.json({ ok: true });
 
-  const maxSeq =
-    db
-      .prepare(`SELECT MAX(sequence) as maxSeq FROM stops WHERE driver_id = ? AND status = 'assigned'`)
-      .get(driver_id).maxSeq || 0;
+  const maxSeq = nextSequenceForDriverToday(driver_id);
 
   const oldDriverId = stop.driver_id;
   db.prepare('UPDATE stops SET driver_id = ?, sequence = ? WHERE id = ?').run(
@@ -551,10 +570,7 @@ router.post('/zoho/sync', async (req, res) => {
       if (!stop) continue; // ya estaba asignado/entregado (de otro sync o a mano) - no se toca
 
       if (!maxSeqCache.has(driverId)) {
-        const row = db
-          .prepare(`SELECT MAX(sequence) as maxSeq FROM stops WHERE driver_id = ? AND status = 'assigned'`)
-          .get(driverId);
-        maxSeqCache.set(driverId, row.maxSeq || 0);
+        maxSeqCache.set(driverId, nextSequenceForDriverToday(driverId));
       }
       const nextSeq = maxSeqCache.get(driverId) + 1;
       maxSeqCache.set(driverId, nextSeq);
