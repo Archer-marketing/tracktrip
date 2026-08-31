@@ -3,29 +3,139 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Panel de Repartidores</title>
+<meta name="theme-color" content="#5b9a3b" />
+<title>Uchben — Panel de Reparto</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
+  :root {
+    --green-dark: #5b9a3b;
+    --green-darker: #487a2f;
+    --green-light: #b9d97a;
+    --ink: #16210f;
+    --paper: #fbfbf8;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: #f8fafc; }
-  .layout { display: flex; height: 100vh; }
-  #map { flex: 1; }
-  .sidebar { width: 340px; background: white; border-left: 1px solid #e2e8f0; overflow-y: auto; padding: 16px; }
-  h3 { margin: 8px 0; }
+  body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: var(--paper); color: var(--ink); -webkit-tap-highlight-color: transparent; }
+  .layout { display: flex; height: 100vh; height: 100dvh; }
+  #map { flex: 1; min-height: 0; }
+  .sidebar { width: 340px; min-width: 340px; background: white; border-left: 1px solid #eceee6; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
+  .sidebar-header { padding: 14px 16px; border-bottom: 1px solid #eceee6; display: flex; align-items: center; gap: 10px; }
+  .sidebar-header .logo-img { display: none; height: 32px; }
+  .sidebar-header .brand { font-size: 16px; font-weight: 800; letter-spacing: .3px; }
+  .sidebar-header .brand .leaf { color: var(--green-dark); }
+  .sidebar-header .brand-sub { font-size: 11px; color: #6b7566; font-weight: 500; }
+  .sidebar-body { padding: 16px; overflow-y: auto; flex: 1; }
+  .panel-section { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid #eef2f7; }
+  .panel-section:last-child { border-bottom: none; }
+  h3 { margin: 0 0 8px; font-size: 14px; color: #334155; letter-spacing: .2px; }
   .stop { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 8px; font-size: 13px; }
-  .stop label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
-  select, button { width: 100%; padding: 10px; margin-top: 8px; border-radius: 8px; border: 1px solid #cbd5e1; }
-  button { background: #2563eb; color: white; border: none; font-weight: 600; cursor: pointer; }
-  button:hover { background: #1d4ed8; }
-  .pass-gate { position: fixed; inset: 0; background: white; display: flex; align-items: center; justify-content: center; }
-  .driver-tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: #dbeafe; color: #1e3a8a; margin-left: 6px; }
+  .stop label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+  .stop-color { width: 12px; height: 12px; min-width: 12px; border-radius: 50%; margin-top: 3px; }
+  .stop-missing { border-color: #fca5a5; background: #fef2f2; }
+  .stop-warn { color: #b91c1c; }
+  .stop a { color: var(--green-darker); }
+  .stop-assigned { border-color: var(--green-light); background: #f4f9ec; }
+  .stop-seq { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-width: 20px; border-radius: 50%; background: var(--green-dark); color: white; font-size: 11px; font-weight: 700; margin-top: 2px; }
+  .stop-delivered { opacity: 0.55; }
+  .pin-label { font-size: 12px; color: #64748b; margin-top: 4px; }
+  select, button, input[type="text"] { width: 100%; padding: 10px; margin-top: 8px; border-radius: 8px; border: 1px solid #cbd5e1; }
+  button { background: var(--green-dark); color: white; border: none; font-weight: 600; cursor: pointer; transition: background-color .15s ease, transform .05s ease; }
+  button:hover { background: var(--green-darker); }
+  button:active { transform: scale(0.97); }
+  .btn-confirm { background: #16a34a; }
+  .btn-confirm:hover { background: #15803d; }
+  .preview-item { display: flex; align-items: center; gap: 8px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; margin-top: 6px; font-size: 13px; }
+  .preview-item span.name { flex: 1; }
+  .mini-btn { width: auto; padding: 2px 8px; margin: 0; font-size: 14px; }
+  .mini-btn:disabled { opacity: 0.3; cursor: default; }
+  .btn-danger { background: #dc2626; }
+  .btn-danger:hover { background: #b91c1c; }
+  .stop-actions { display: flex; gap: 4px; margin-left: auto; align-self: flex-start; }
+  .stop-actions .mini-btn { background: #e2e8f0; color: #334155; }
+  .stop-actions .mini-btn:hover { background: #cbd5e1; }
+  .stop-actions .mini-btn.remove { background: #fee2e2; color: #b91c1c; }
+  .stop-actions .mini-btn.remove:hover { background: #fecaca; }
+  .pass-gate { position: fixed; inset: 0; background: var(--paper); display: flex; align-items: center; justify-content: center; }
+  .pass-gate .logo-img { display: none; max-height: 64px; max-width: 260px; margin: 0 auto 12px; }
+  .pass-gate .brand { font-size: 22px; font-weight: 800; letter-spacing: 0.5px; }
+  .pass-gate .brand .leaf { color: var(--green-dark); }
+  .pass-gate .brand-sub { font-size: 12px; color: #6b7566; margin-top: 2px; margin-bottom: 18px; }
+  .stop-alerts { display: flex; gap: 10px; margin-top: 4px; }
+  .stop-alerts-label { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748b; cursor: pointer; }
+  .stop-alerts-label input[type="checkbox"] { width: auto; margin: 0; }
+  .tab-bar { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; }
+  /* Selectores mas especificos que "button:hover" (con id, para no perder
+     contra el hover generico de arriba y que las pestanas no "brinquen"
+     a azul solido al pasar el mouse). */
+  #stopTabs.tab-bar .tab-btn {
+    width: auto; white-space: nowrap; padding: 6px 12px; font-size: 12px;
+    background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0;
+    border-radius: 999px; margin: 0; font-weight: 600;
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform .05s ease;
+  }
+  #stopTabs.tab-bar .tab-btn:hover { background: #e2e8f0; }
+  #stopTabs.tab-bar .tab-btn:active { transform: scale(0.96); }
+  #stopTabs.tab-bar .tab-btn.active { background: var(--green-dark); color: white; border-color: var(--green-dark); }
+  #stopTabs.tab-bar .tab-btn.active:hover { background: var(--green-darker); }
+
+  /* --- Repartidores: tarjeta con color/estado/detenido --- */
+  .driver-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-bottom: 8px; font-size: 13px; }
+  .driver-card.inactive { opacity: 0.55; }
+  .driver-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .driver-dot { width: 12px; height: 12px; min-width: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+  .conn-badge { margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .conn-badge.online { background: #dcfce7; color: #15803d; }
+  .conn-badge.offline { background: #fee2e2; color: #b91c1c; }
+  .stationary-note { margin-top: 4px; font-size: 12px; color: #b45309; }
+  .route-started-warning { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-bottom: 8px; }
+  .driver-card .mini-btn { width: auto; margin-top: 8px; margin-right: 4px; }
+  .driver-card .mini-btn.remove { background: #fee2e2; color: #b91c1c; }
+  .driver-card .mini-btn.remove:hover { background: #fecaca; }
+
+  /* --- Reasignar pedido a otro repartidor --- */
+  .reassign-select { width: auto; padding: 2px 6px; margin: 0; font-size: 12px; border-radius: 6px; }
+
+  /* --- Agregar pedido manual --- */
+  .manual-add-row { display: flex; gap: 6px; }
+  .manual-add-row input { margin-top: 0; flex: 1; min-width: 0; }
+  .manual-add-row button { width: auto; white-space: nowrap; margin-top: 0; }
+
+  /* --- Zoho: mapeo de vendedores + resultados de sync --- */
+  .zoho-salesperson-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
+  .zoho-salesperson-row .name { flex: 1; }
+  .zoho-salesperson-row select { width: auto; margin: 0; padding: 4px 6px; font-size: 12px; }
+  .zoho-summary { font-size: 13px; margin-top: 10px; }
+  .zoho-warning { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-top: 8px; }
+  .zoho-error { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-top: 8px; }
+  .zoho-notfound-item { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px; margin-top: 8px; font-size: 12px; }
+  .zoho-notfound-item .actions { display: flex; gap: 6px; margin-top: 6px; }
+  .zoho-notfound-item .actions button { width: auto; margin: 0; padding: 4px 10px; font-size: 12px; }
+  .zoho-notfound-item .actions .ignore-btn { background: #e2e8f0; color: #334155; }
+
+  /* --- Mobile: apilar mapa arriba (mas chico) y panel abajo, a todo el ancho --- */
+  @media (max-width: 768px) {
+    .layout { flex-direction: column; }
+    #map { flex: none; height: 42vh; min-height: 220px; width: 100%; }
+    .sidebar { width: 100%; min-width: 0; flex: 1; border-left: none; border-top: 1px solid #e2e8f0; }
+    input, select, button, textarea { font-size: 16px; } /* evita zoom automatico de iOS al enfocar */
+    .stop-actions { align-self: center; }
+  }
 </style>
 </head>
 <body>
 
 <div class="pass-gate" id="gate">
   <div style="text-align:center">
-    <h2>Panel de Administrador</h2>
+    <img
+      id="gateLogoImg"
+      class="logo-img"
+      src="logo.png"
+      alt="Uchben"
+      onload="this.style.display='block'; document.getElementById('gateBrandFallback').style.display='none';"
+      onerror="this.style.display='none';"
+    />
+    <div class="brand" id="gateBrandFallback"><span class="leaf">🌿</span> UCHBEN</div>
+    <div class="brand-sub">Panel de Reparto</div>
     <input id="pass" type="password" placeholder="Contraseña" style="padding:12px;font-size:16px;border-radius:8px;border:1px solid #cbd5e1;" />
     <button onclick="enter()" style="margin-top:12px;">Entrar</button>
   </div>
@@ -34,16 +144,96 @@
 <div class="layout" id="layout" style="display:none;">
   <div id="map"></div>
   <div class="sidebar">
-    <h3>Repartidores</h3>
-    <div id="drivers"></div>
+    <div class="sidebar-header">
+      <img
+        id="sidebarLogoImg"
+        class="logo-img"
+        src="logo.png"
+        alt="Uchben"
+        onload="this.style.display='block'; document.getElementById('sidebarBrandFallback').style.display='none';"
+        onerror="this.style.display='none';"
+      />
+      <div id="sidebarBrandFallback">
+        <div class="brand"><span class="leaf">🌿</span> UCHBEN</div>
+        <div class="brand-sub">Panel de Reparto</div>
+      </div>
+    </div>
+    <div class="sidebar-body">
+    <div class="panel-section">
+      <h3>Repartidores</h3>
+      <div id="drivers"></div>
+      <input id="newDriverName" type="text" placeholder="Nombre del repartidor" />
+      <input id="newDriverCode" type="text" placeholder="Código de acceso (ej. juan123)" />
+      <button onclick="addDriver()">➕ Agregar repartidor</button>
+    </div>
 
-    <button onclick="syncKommo()">🔄 Sincronizar pedidos desde Kommo</button>
+    <div class="panel-section">
+      <h3>🔗 Liga de monitoreo</h3>
+      <div class="pin-label">Liga fija (sin token, siempre la misma) para que el equipo vea a todos los repartidores en vivo, sin poder editar nada. Es publica: cualquiera con esta liga puede verla.</div>
+      <input id="monitorLinkInput" type="text" readonly onclick="this.select()" />
+      <button onclick="copyMonitorLink()">📋 Copiar</button>
+    </div>
 
-    <h3>Pedidos pendientes</h3>
-    <div id="stops"></div>
+    <div class="panel-section">
+      <h3>Kommo: embudo y etapa</h3>
+      <select id="pipelineSelect" onchange="onPipelineChange()"></select>
+      <select id="statusSelect" onchange="saveKommoFilter(true)"></select>
+      <button onclick="saveKommoFilter()">💾 Guardar embudo/etapa</button>
+    </div>
 
-    <select id="driverSelect"></select>
-    <button onclick="assignRoute()">🗺️ Optimizar ruta y asignar</button>
+    <div class="panel-section">
+      <h3>Kommo: campo de factura (opcional)</h3>
+      <select id="invoiceFieldSelect" onchange="saveInvoiceField(true)"></select>
+      <button onclick="saveInvoiceField()">💾 Guardar factura</button>
+    </div>
+
+    <div class="panel-section">
+      <button onclick="syncKommo()">🔄 Sincronizar pedidos desde Kommo</button>
+      <h3 style="margin-top:12px;">Agregar pedido manual (por ID de lead)</h3>
+      <div class="manual-add-row">
+        <input id="manualLeadId" type="text" placeholder="ID del lead de Kommo" />
+        <button onclick="addLeadManually()">➕ Agregar</button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <h3>Zoho: vendedores → repartidores</h3>
+      <div class="pin-label">Asocia cada vendedor de Zoho con su repartidor aquí (los nombres no siempre coinciden).</div>
+      <div id="zohoSalespersons"></div>
+      <button onclick="syncZoho()" style="margin-top:10px;">🔄 Preasignar pedidos de Zoho (hoy)</button>
+      <div id="zohoSyncResults"></div>
+    </div>
+
+    <div class="panel-section">
+      <h3>Pedidos</h3>
+      <div id="stopTabs" class="tab-bar"></div>
+      <div id="routeActions"></div>
+      <div id="stops"></div>
+    </div>
+
+    <div id="assignControls" class="panel-section">
+      <select id="driverSelect" onchange="clearPreview()"></select>
+
+      <h3 style="margin-top:12px;">Punto de partida</h3>
+      <select id="startSelect" onchange="onStartSelectChange()">
+        <option value="driver">Ubicación actual del repartidor</option>
+        <option value="pin">📍 Elegir en el mapa</option>
+      </select>
+      <div id="startPinLabel" class="pin-label"></div>
+
+      <h3>Punto final (opcional)</h3>
+      <select id="endSelect" onchange="onEndSelectChange()">
+        <option value="">(automático, sin punto fijo)</option>
+        <option value="pin">🏁 Elegir en el mapa</option>
+      </select>
+      <div id="endPinLabel" class="pin-label"></div>
+
+      <button onclick="previewRoute()">🔍 Vista previa de ruta</button>
+      <button id="invertRouteBtn" onclick="invertPreviewOrder()" style="display:none;">🔄 Invertir ruta</button>
+      <div id="previewList"></div>
+      <button id="confirmRouteBtn" class="btn-confirm" onclick="confirmRoute()" style="display:none;">✅ Confirmar y asignar</button>
+    </div>
+    </div>
   </div>
 </div>
 

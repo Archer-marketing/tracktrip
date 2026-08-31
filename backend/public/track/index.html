@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Rastrea tu pedido</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    --green-dark: #5b9a3b;
+    --green-light: #b9d97a;
+    --ink: #16210f;
+    --paper: #fbfbf8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, system-ui, sans-serif;
+    background: var(--paper); color: var(--ink); min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  .header {
+    padding: 20px 16px 14px; text-align: center; background: white;
+    border-bottom: 1px solid #eceee6;
+  }
+  .brand { font-size: 22px; font-weight: 800; letter-spacing: 0.5px; }
+  .brand .leaf { color: var(--green-dark); }
+  .tagline { font-size: 11px; color: #6b7566; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+  .logo-img { display: none; max-height: 64px; max-width: 260px; margin: 0 auto; }
+
+  .content { flex: 1; display: flex; flex-direction: column; padding: 16px; gap: 16px; }
+
+  .status-pill {
+    display: inline-block; padding: 8px 16px; border-radius: 999px;
+    background: var(--green-light); color: var(--ink); font-weight: 700;
+    font-size: 15px; text-align: center; align-self: center;
+  }
+  .big-count { font-size: 40px; font-weight: 800; color: var(--green-dark); text-align: center; margin: 4px 0; }
+  .subtext { text-align: center; color: #5c6656; font-size: 14px; }
+
+  #map { height: 320px; border-radius: 16px; overflow: hidden; border: 1px solid #e2e6da; }
+
+  .empty-card {
+    background: white; border: 1px solid #eceee6; border-radius: 16px;
+    padding: 32px 20px; text-align: center; margin-top: 40px;
+  }
+  .empty-card .icon { font-size: 40px; margin-bottom: 8px; }
+  .empty-card p { color: #5c6656; font-size: 14px; }
+
+  .footer { text-align: center; padding: 12px; font-size: 11px; color: #9aa393; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <img
+      id="logoImg"
+      class="logo-img"
+      src="logo.png"
+      alt="Uchben"
+      onload="this.style.display='block'; document.getElementById('brandFallback').style.display='none';"
+      onerror="this.style.display='none';"
+    />
+    <div class="brand" id="brandFallback"><span class="leaf">🌿</span> UCHBEN</div>
+    <div class="tagline">Donde lo fresco nunca se pierde</div>
+  </div>
+
+  <div class="content" id="content">
+    <div class="empty-card"><div class="icon">⏳</div><p>Cargando tu pedido...</p></div>
+  </div>
+
+  <div class="footer">Esta liga es personal y deja de funcionar 24h despues de asignarse</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

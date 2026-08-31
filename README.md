@@ -9,9 +9,14 @@ App para:
 ## Estructura
 ```
 delivery-tracker/
+  Dockerfile                 <- Dockerfile en la raiz, listo para Easypanel
+                                (metodo de build "Dockerfile", sin tocar
+                                Ruta de compilacion / Archivo)
   backend/                  <- servidor Node.js (API + panel admin + PWA repartidor)
-                                incluye Dockerfile listo para Easypanel
-  docker-compose.yml         <- servicio principal "app" (esto es lo que usa Easypanel)
+                                incluye su propio Dockerfile (usado por
+                                docker-compose.yml para desarrollo local)
+  docker-compose.yml         <- servicio principal "app" (para correrlo tu
+                                mismo o pegarlo en Easypanel como "App > Compose")
   docker-compose.osrm.yml    <- OSRM opcional (motor de rutas por calles reales)
   osrm-data/                 <- aquí van los datos de mapa para OSRM (opcional)
 ```
@@ -27,8 +32,16 @@ Easypanel jala el código desde un repositorio. Sube esta carpeta tal cual
 ## 2. Crea el servicio en Easypanel
 1. En tu proyecto de Easypanel, **Create Service > App**.
 2. Fuente: conecta tu repo de Git.
-3. **Build**: tipo "Dockerfile", con contexto/ruta `backend` (ahí está el
-   `Dockerfile`).
+3. **Build**: tipo "Dockerfile", **Ruta de compilación** `/` y
+   **Archivo** `Dockerfile` (son los valores por default — hay un
+   `Dockerfile` en la raíz del repo, no hace falta escribir `backend/nada`).
+
+   > ⚠️ **Error común**: si el Archivo dice `docker-compose.yml`, Easypanel
+   > va a intentar compilar ese archivo como si fuera un Dockerfile y falla
+   > con `unknown instruction: version:`. Un `docker-compose.yml` **no es**
+   > un Dockerfile — o usas el método "Dockerfile" apuntando al `Dockerfile`
+   > de la raíz (este paso), o usas el tipo de servicio "App > Compose" con
+   > el `docker-compose.yml` (ver paso 4 más abajo). No mezcles los dos.
 4. **Puerto**: 3000 (Easypanel lo detecta o lo pones manual en "Ports").
 5. **Dominio**: en la pestaña "Domains", agrega tu dominio o subdominio
    (ej. `reparto.tuempresa.com`) y activa HTTPS — Easypanel genera el
@@ -50,10 +63,22 @@ KOMMO_STATUS_ID=
 NOMINATIM_URL=https://nominatim.openstreetmap.org
 NOMINATIM_USER_AGENT=mi-delivery-tracker (contacto@tuempresa.com)
 OSRM_URL=http://localhost:5000
+KOMMO_TRACKING_FIELD_ID=2445646
+KOMMO_BOT_3_AWAY_ID=103880
+KOMMO_BOT_NEXT_ID=103878
+KOMMO_DELIVERED_STATUS_ID=
+KOMMO_DELIVERED_PIPELINE_ID=
+ZOHO_CLIENT_ID=
+ZOHO_CLIENT_SECRET=
+ZOHO_REFRESH_TOKEN=
+ZOHO_ORGANIZATION_ID=
+ZOHO_ACCOUNTS_DOMAIN=https://accounts.zoho.com
+ZOHO_API_DOMAIN=https://www.zohoapis.com
 ```
 (`PORT` y `SQLITE_PATH` ya vienen fijos en el `Dockerfile`/`docker-compose.yml`,
 no hace falta tocarlos). Ver la sección **"Configurar Kommo"** más abajo para
-saber cómo sacar `KOMMO_ADDRESS_FIELD_ID` y `KOMMO_STATUS_ID`.
+saber cómo sacar `KOMMO_ADDRESS_FIELD_ID` y `KOMMO_STATUS_ID`, y **"Configurar
+Zoho Books"** para las variables `ZOHO_*`.
 
 Guarda y haz **Deploy**. Con eso ya tienes `https://reparto.tuempresa.com/admin`
 y `https://reparto.tuempresa.com/driver` funcionando con HTTPS.
@@ -64,16 +89,23 @@ de conectar un repo, puedes pegar el contenido de `docker-compose.yml` ahí
 directamente (Easypanel se encarga de exponer el dominio/HTTPS igual).
 
 ## 5. Crear repartidores
-Usa la pestaña **"Terminal"** de Easypanel (te da una consola dentro del
-contenedor) o simplemente corre esto desde tu computadora, apuntando a tu
-dominio ya público:
+Entra a `/admin`, en la sección **"Repartidores"** pon el nombre y un
+código de acceso (lo que el repartidor va a usar para entrar a
+`/driver`, ej. `juan123`) y dale "➕ Agregar repartidor". Repite por
+cada repartidor (máximo recomendado: 4, aunque soporta más).
+
+Cada repartidor tiene un botón **"🚫 Desactivar" / "✅ Activar"**: si lo
+desactivas, su código deja de funcionar en `/driver` al instante (sin
+borrar su historial de entregas), y tampoco aparece como opción al
+asignar rutas.
+
+Alternativa por curl, si lo prefieres:
 ```bash
 curl -X POST https://reparto.tuempresa.com/api/admin/drivers \
   -H "Content-Type: application/json" \
   -H "x-admin-password: TU_ADMIN_PASSWORD" \
   -d '{"name":"Juan", "login_code":"juan123"}'
 ```
-Repite por cada repartidor (máximo recomendado: 4, aunque soporta más).
 
 ## 6. Motor de rutas real (OSRM) — opcional
 Por defecto el sistema calcula rutas con distancia en línea recta (rápido,
@@ -150,25 +182,75 @@ pm2 startup
    larga duración** (long-lived token). Es tu `KOMMO_ACCESS_TOKEN`.
 2. Tu subdominio de Kommo (la parte antes de `.kommo.com`) es
    `KOMMO_SUBDOMAIN`.
-3. Necesitas el **ID del campo personalizado** donde guardas la dirección
-   de entrega:
-   ```bash
-   curl -H "Authorization: Bearer TU_TOKEN" \
-     https://tuempresa.kommo.com/api/v4/leads/custom_fields
-   ```
-   Busca el campo de dirección y copia su `"id"` a `KOMMO_ADDRESS_FIELD_ID`.
-4. (Opcional) Si quieres sincronizar solo los leads en un estado/pipeline
-   específico ("listo para entregar"):
-   ```bash
-   curl -H "Authorization: Bearer TU_TOKEN" \
-     https://tuempresa.kommo.com/api/v4/leads/pipelines
-   ```
-   pon ese `status_id` en `KOMMO_STATUS_ID`. Si lo dejas vacío, se
-   sincronizan todos los leads abiertos.
+3. Configura `KOMMO_ACCESS_TOKEN` y `KOMMO_SUBDOMAIN` en Easypanel y haz
+   deploy. Con eso ya puedes entrar al panel (`/admin`) y usar los
+   selectores en vez de sacar IDs a mano con curl:
+   - **"Kommo: embudo y etapa"** — elige en qué embudo/etapa están los
+     pedidos listos para entregar (opcional, si no eliges nada sincroniza
+     todos los leads abiertos).
+   - El campo con la ubicación de entrega (dirección en texto, link
+     completo de Google Maps, uno acortado `maps.app.goo.gl/...`, o
+     `"lat,lng"` plano — se detecta automático cuál es) ya no se elige en
+     el panel, es fijo por `KOMMO_ADDRESS_FIELD_ID` / `KOMMO_LATLNG_FIELD_ID`.
+   - **"Kommo: campo de factura (opcional)"** — si tienes un campo con la
+     factura del pedido (una liga a un PDF/imagen, o solo un número de
+     factura en texto), elígelo aquí. Se le va a mostrar al repartidor
+     junto con esa parada — como botón "🧾 Ver factura" si es una liga,
+     o como texto si no.
 
 Cada clic en "Sincronizar pedidos desde Kommo" en el panel trae los leads,
 geocodifica la dirección (si no tienes lat/lng directo) y los agrega como
-pedidos pendientes.
+pedidos pendientes. Si cambias el embudo/etapa (o un lead ya no aparece
+en Kommo con ese filtro), los pendientes que ya no correspondan se
+quitan solos en el siguiente sync — no se acumulan. Esto solo aplica a
+pendientes sin asignar; un pedido ya asignado a un repartidor o ya
+entregado nunca se toca.
+
+---
+
+## Configurar Zoho Books
+Esto es opcional — sirve para preasignar pedidos automáticamente a un
+repartidor a partir de las **facturas del día** en Zoho Books, usando el
+campo **vendedor** de cada factura (ej. "cuando factura JEFREE, el pedido
+es de Luis"). Encuentra al cliente en Kommo buscando por los últimos 10
+dígitos de su teléfono (para no fallar por "+52", ceros a la izquierda,
+etc.) y lo asigna directo a la ruta de ese repartidor — queda igual de
+editable después (reasignar, mover, quitar) que cualquier otro pedido.
+
+1. Necesitas generar credenciales de API en la
+   [Consola de API de Zoho](https://api-console.zoho.com/) (con la misma
+   cuenta que usa Zoho Books):
+   - Crea un cliente tipo **"Self Client"**.
+   - En la pestaña "Generate Code", pide el scope
+     `ZohoBooks.invoices.READ,ZohoBooks.contacts.READ,ZohoBooks.settings.READ`
+     y genera un código (dura pocos minutos, úsalo rápido).
+   - Cambia ese código por un `refresh_token` de larga duración (esto se
+     hace una sola vez, con una llamada tipo):
+     ```
+     curl -X POST https://accounts.zoho.com/oauth/v2/token \
+       -d "grant_type=authorization_code" \
+       -d "client_id=TU_CLIENT_ID" \
+       -d "client_secret=TU_CLIENT_SECRET" \
+       -d "code=EL_CODIGO_GENERADO"
+     ```
+     La respuesta trae `refresh_token` — ese es el que se queda fijo en
+     `ZOHO_REFRESH_TOKEN` (el `access_token` es temporal, la app lo renueva
+     sola).
+2. `ZOHO_ORGANIZATION_ID` es el ID de tu organización en Zoho Books
+   (aparece en la URL cuando entras a Zoho Books, o en Ajustes > Perfil de
+   la organización).
+3. Si tu cuenta de Zoho está en otro centro de datos (Zoho.eu, Zoho.in,
+   etc.), ajusta `ZOHO_ACCOUNTS_DOMAIN` y `ZOHO_API_DOMAIN` — para la
+   mayoría de las cuentas (incluida México) los valores por defecto ya
+   son correctos.
+4. Configura las 5 variables `ZOHO_*` en Easypanel y haz deploy. En el
+   panel (`/admin`) verás **"Zoho: vendedores → repartidores"** con la
+   lista de vendedores de tu cuenta — asocia cada uno con su repartidor
+   (puede quedar sin asociar si ese vendedor no reparte).
+5. Dale a **"🔄 Preasignar pedidos de Zoho (hoy)"** cuando quieras correr
+   la conciliación. Si una factura no encuentra lead en Kommo, aparece en
+   una lista con botones **"Ir a Kommo"** (para buscarlo/crearlo a mano)
+   o **"Ignorar"** — no se crea nada solo en ese caso.
 
 ---
 
@@ -181,12 +263,87 @@ pedidos pendientes.
    los repartidores en el mapa en tiempo real.
 3. Le das clic a "Sincronizar pedidos desde Kommo" para traer los pedidos
    nuevos.
-4. Marcas qué pedidos van con qué repartidor, clic en "Optimizar ruta y
-   asignar" — el sistema calcula el orden más corto empezando desde donde
-   está el repartidor ahora mismo.
+4. En "📋 Pendientes" hay un botón **"☑️ Seleccionar/deseleccionar
+   todos"** por si quieres armar una ruta con todo lo que hay (solo
+   selecciona los que tienen ubicación válida).
+
+   Marcas qué pedidos van con qué repartidor. **"Punto de partida"** cae
+   por default en la oficina/bodega configurada (una liga de Google Maps
+   que se resuelve sola a coordenadas la primera vez que carga el panel,
+   y se cachea) — puedes cambiarlo por la ubicación actual del
+   repartidor, un cliente ya cargado, o "Elegir en el mapa". Lo mismo con
+   **"Punto final"** (opcional, sin default).
+
+   Para cambiar la oficina/bodega configurada:
+   ```bash
+   curl -X POST https://reparto.tuempresa.com/api/admin/default-start-point \
+     -H "Content-Type: application/json" \
+     -H "x-admin-password: TU_ADMIN_PASSWORD" \
+     -d '{"url":"https://maps.app.goo.gl/TU_LIGA", "label":"🏢 Bodega nueva"}'
+   ```
+   Clic en **"🔍 Vista previa de ruta"** — el mapa te muestra el orden
+   propuesto con números (1, 2, 3...) para que revises que tenga sentido
+   antes de confirmar. Si te convence, dale **"✅ Confirmar y asignar"**.
+   En cuanto confirmas, se abre una **pestaña nueva con el nombre de ese
+   repartidor** arriba de la lista de pedidos — ahí ves solo su ruta
+   (numerada, con el color de ese repartidor), separada de las de los
+   demás. La pestaña "📋 Pendientes" sigue siendo donde seleccionas
+   pedidos para armar la siguiente ruta. Los entregados el día de hoy
+   aparecen marcados con ✅ dentro de la pestaña de su repartidor.
+
+   Dentro de la pestaña de un repartidor, cada pedido sin entregar
+   todavía tiene botones **▲▼** (para reordenarlo dentro de esa misma
+   ruta) y **✖** (para quitarlo — regresa a "Pendientes" para
+   reasignarlo). Arriba de la lista hay un botón **"✅ Marcar ruta como
+   terminada"**: lo que le haya quedado sin entregar a ese repartidor
+   regresa también a "Pendientes" (nada se borra ni se marca como
+   entregado a la fuerza).
 5. Al repartidor le aparece automáticamente "tu siguiente parada" con
    botón directo a Google Maps. Cuando entrega, toca "Marcar como
-   entregado" y le aparece la siguiente.
+   entregado" y le aparece la siguiente. Si quiere ver todo su recorrido
+   (por ejemplo si un cliente no está y prefiere ver qué más le falta),
+   puede tocar "🗺️ Ver ruta completa" — mapa y lista con todas sus
+   paradas del día, marcando cuáles ya entregó, y con su propia
+   ubicación en tiempo real (🚚) para orientarse respecto a las paradas.
+
+   Si tiene pedidos asignados y todavía no le da a nada, le aparece un
+   botón morado **"🚀 Iniciar ruta"**. Puede ver/entregar pedidos sin
+   tocarlo, pero **ninguna alerta de Kommo se dispara hasta que lo
+   toque** — es la señal de "ya salí a repartir". En cuanto lo toca, se
+   revisan de una vez las alertas que ya le tocaban (por si arrancaba
+   con alguien a 3 pedidos o menos).
+6. Al confirmar la ruta (paso 4), cada pedido recién asignado recibe una
+   **liga pública de rastreo** (`https://tudominio.com/track/<token>`),
+   única por pedido y válida 24 horas. Ahí el cliente ve el mapa con su
+   repartidor en tiempo real y cuántos pedidos le faltan para llegar al
+   suyo — sin contraseña, pensada para compartirse directo con él. Esa
+   misma liga se escribe automáticamente en el campo personalizado
+   `KOMMO_TRACKING_FIELD_ID` del lead en Kommo.
+7. Además, cada vez que se asigna una ruta o el repartidor marca un
+   pedido como entregado, el sistema revisa cuántos pedidos le faltan a
+   cada lead y dispara automáticamente el Salesbot correspondiente en
+   Kommo: **`KOMMO_BOT_3_AWAY_ID`** cuando a un pedido le faltan
+   exactamente 3 antes que el suyo, y **`KOMMO_BOT_NEXT_ID`** cuando ya
+   es el siguiente. Si una ruta se asigna con menos de 3 pedidos antes
+   del suyo, el primero nunca se dispara — solo el de "es el siguiente"
+   cuando le toque. Cada uno se dispara una sola vez por pedido. Ambos
+   pasan por la misma cola con límite de tasa (máximo ~6
+   solicitudes/segundo a Kommo, con margen sobre su límite de 7).
+
+   Dentro de la ruta de un repartidor, cada pedido tiene **dos
+   checkboxes separados**: **"🔔 Faltan 3"** y **"🔔 Es el siguiente"**
+   (una por cada alerta, no una sola general). Marcado significa "esta
+   armada, se va a mandar cuando toque"; en cuanto se dispara, se
+   desmarca sola y **se queda así para siempre** — no se vuelve a
+   mandar esa alerta a ese pedido aunque lo reasignes o edites la ruta
+   varias veces, salvo que tú mismo la vuelvas a marcar (ahí se revisa
+   al toque si ya toca dispararla).
+8. Cuando el repartidor marca un pedido como **entregado**, si configuraste
+   **`KOMMO_DELIVERED_STATUS_ID`** el lead se mueve automáticamente a esa
+   etapa en Kommo (opcionalmente junto con **`KOMMO_DELIVERED_PIPELINE_ID`**
+   si esa etapa vive en otro embudo). Es fijo por variable de entorno, igual
+   que `KOMMO_TRACKING_FIELD_ID` — no hay control para esto en el panel. Si
+   no la configuras, simplemente no mueve nada.
 
 ## Limitación importante sobre "segundo plano"
 Ningún navegador (Chrome, Safari) garantiza mandar ubicación si el

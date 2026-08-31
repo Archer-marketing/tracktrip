@@ -9,10 +9,10 @@ WORKDIR /app
 RUN apk add --no-cache tzdata
 ENV TZ=America/Cancun
 
-COPY package.json package-lock.json* ./
+COPY backend/package.json backend/package-lock.json* ./
 RUN npm install --omit=dev
 
-COPY . .
+COPY backend/ .
 
 # Aqui vivira la base de datos SQLite (se monta como volumen persistente en Easypanel)
 RUN mkdir -p /app/data
