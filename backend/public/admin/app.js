@@ -58,6 +58,7 @@ async function init() {
   await loadKommoPipelines();
   await loadKommoFields();
   await loadMonitorLink();
+  await loadReorderLink();
   await loadZohoSalespersons();
 
   const socket = io();
@@ -632,6 +633,24 @@ async function loadMonitorLink() {
 
 function copyMonitorLink() {
   const input = document.getElementById('monitorLinkInput');
+  input.select();
+  navigator.clipboard?.writeText(input.value).then(
+    () => alert('Liga copiada.'),
+    () => document.execCommand('copy')
+  );
+}
+
+async function loadReorderLink() {
+  try {
+    const result = await api('/api/admin/reorder-link');
+    document.getElementById('reorderLinkInput').value = result.url;
+  } catch (e) {
+    console.error('No se pudo cargar la liga de reacomodo', e);
+  }
+}
+
+function copyReorderLink() {
+  const input = document.getElementById('reorderLinkInput');
   input.select();
   navigator.clipboard?.writeText(input.value).then(
     () => alert('Liga copiada.'),

@@ -175,6 +175,13 @@
     </div>
 
     <div class="panel-section">
+      <h3>🔀 Liga de reacomodo</h3>
+      <div class="pin-label">Para reacomodar el orden de una ruta activa arrastrando (amigable para celular). Pide su propio código de acceso — configúralo como <code>REORDER_PASSWORD</code> en las variables de entorno. No sirve para asignar ni editar nada más.</div>
+      <input id="reorderLinkInput" type="text" readonly onclick="this.select()" />
+      <button onclick="copyReorderLink()">📋 Copiar</button>
+    </div>
+
+    <div class="panel-section">
       <h3>Kommo: embudo y etapa</h3>
       <select id="pipelineSelect" onchange="onPipelineChange()"></select>
       <select id="statusSelect" onchange="saveKommoFilter(true)"></select>

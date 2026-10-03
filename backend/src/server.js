@@ -10,6 +10,7 @@ const adminRoutes = require('./routes/admin');
 const driverRoutes = require('./routes/driver');
 const trackRoutes = require('./routes/track');
 const monitorRoutes = require('./routes/monitor');
+const reorderRoutes = require('./routes/reorder');
 
 const app = express();
 const server = http.createServer(app);
@@ -26,11 +27,13 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api/track', trackRoutes);
 app.use('/api/monitor', monitorRoutes);
+app.use('/api/reorder', reorderRoutes);
 
 app.use('/admin', express.static(path.join(__dirname, '..', 'public', 'admin')));
 app.use('/driver', express.static(path.join(__dirname, '..', 'public', 'driver')));
 app.use('/track', express.static(path.join(__dirname, '..', 'public', 'track')));
 app.use('/monitor', express.static(path.join(__dirname, '..', 'public', 'monitor')));
+app.use('/reorder', express.static(path.join(__dirname, '..', 'public', 'reorder')));
 // Liga publica de rastreo con token en la URL (/track/<token>): sirve el
 // mismo index.html para que el frontend lea el token del path, ya que no
 // es un archivo real. La de monitoreo NO lleva token (es /monitor a secas,

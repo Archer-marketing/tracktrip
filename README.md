@@ -55,6 +55,7 @@ Easypanel jala el código desde un repositorio. Sube esta carpeta tal cual
 En la pestaña **Environment** del servicio, agrega:
 ```
 ADMIN_PASSWORD=cambia_esta_clave
+REORDER_PASSWORD=otra_clave_distinta
 KOMMO_SUBDOMAIN=tuempresa
 KOMMO_ACCESS_TOKEN=tu_token_de_kommo
 KOMMO_ADDRESS_FIELD_ID=123456
@@ -251,6 +252,25 @@ editable después (reasignar, mover, quitar) que cualquier otro pedido.
    la conciliación. Si una factura no encuentra lead en Kommo, aparece en
    una lista con botones **"Ir a Kommo"** (para buscarlo/crearlo a mano)
    o **"Ignorar"** — no se crea nada solo en ese caso.
+
+---
+
+## Liga de reacomodo (`/reorder`)
+Página aparte, ligera y pensada para celular, donde se puede **arrastrar y
+soltar** para cambiar el orden de una ruta ya asignada — sin dar acceso al
+resto del panel (no se pueden agregar/quitar repartidores, tocar Kommo/Zoho,
+etc). Pensada para compartirse con un supervisor o encargado de ruta.
+
+1. Configura `REORDER_PASSWORD` en Easypanel (una clave **distinta** a
+   `ADMIN_PASSWORD` — quien la tenga puede reacomodar rutas, nada más).
+2. En el panel (`/admin`) verás la sección **"🔀 Liga de reacomodo"** con
+   la liga lista para copiar (`https://reparto.tuempresa.com/reorder`).
+3. Quien entre ahí elige el repartidor en un selector, ve su ruta activa
+   en tarjetas, y las arrastra desde el ícono ☰ para reordenarlas. Al
+   soltar aparece un botón **"💾 Guardar orden"** para confirmar.
+4. No toca pedidos ya entregados, no cambia de repartidor, y no reinicia
+   "Iniciar ruta" — el repartidor no tiene que volver a confirmar nada,
+   solo ve su ruta en el nuevo orden la próxima vez que su app consulte.
 
 ---
 
