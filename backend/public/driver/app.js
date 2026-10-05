@@ -2,6 +2,14 @@ let driverId = localStorage.getItem('driverId');
 let driverName = localStorage.getItem('driverName');
 let socket;
 let watchId;
+let pollIntervalId;
+let statusIntervalId;
+let routeMap, routeMarkers = [];
+let confirmMap, confirmMarkers = [];
+let routeVisible = false;
+let myLat = null, myLng = null, myLocationMarker = null;
+let lastSentAt = null;
+let routeStarted = false;
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/driver/sw.js').catch(() => {});
@@ -15,14 +23,32 @@ async function requestWakeLock() {
     if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
   } catch (e) { /* no critico */ }
 }
+// Al volver a la pestaña (ej. el repartidor cierra Google Maps y regresa),
+// no esperamos al siguiente tick natural del GPS: pedimos una lectura de
+// una vez para cerrar el hueco de ubicacion lo antes posible.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') requestWakeLock();
+  if (document.visibilityState === 'visible') {
+    requestWakeLock();
+    if (driverId && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => sendLocation(pos.coords.latitude, pos.coords.longitude),
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+      );
+    }
+  }
 });
 
 function setStatus(on) {
   const el = document.getElementById('statusBar');
-  el.textContent = on ? 'Ubicación: activa ✅' : 'Ubicación: inactiva';
   el.className = 'status ' + (on ? 'on' : 'off');
+  if (!on) {
+    el.textContent = 'Ubicación: inactiva';
+    return;
+  }
+  const secs = lastSentAt ? Math.floor((Date.now() - lastSentAt) / 1000) : null;
+  const ago = secs == null ? '' : secs < 5 ? ' · al instante' : secs < 60 ? ` · hace ${secs}s` : ` · hace ${Math.floor(secs / 60)}m`;
+  el.textContent = `Ubicación: activa ✅${ago}`;
 }
 
 async function login() {
@@ -45,10 +71,72 @@ async function login() {
 function startApp() {
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
+  document.getElementById('driverBadge').style.display = 'block';
+  document.getElementById('driverNameLabel').textContent = driverName || '';
   requestWakeLock();
   startTracking();
   pollNextStop();
-  setInterval(pollNextStop, 15000);
+  if (pollIntervalId) clearInterval(pollIntervalId);
+  pollIntervalId = setInterval(pollNextStop, 15000);
+}
+
+// Cierra la sesion de este repartidor en este dispositivo/navegador, para
+// poder entrar con otro codigo sin que se quede pegado el anterior.
+function logout() {
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+  if (pollIntervalId) {
+    clearInterval(pollIntervalId);
+    pollIntervalId = null;
+  }
+  if (statusIntervalId) {
+    clearInterval(statusIntervalId);
+    statusIntervalId = null;
+  }
+  lastSentAt = null;
+  localStorage.removeItem('driverId');
+  localStorage.removeItem('driverName');
+  driverId = null;
+  driverName = null;
+
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('driverBadge').style.display = 'none';
+  document.getElementById('login').style.display = 'flex';
+  document.getElementById('code').value = '';
+  setStatus(false);
+
+  routeVisible = false;
+  routeStarted = false;
+  document.getElementById('routeSection').style.display = 'none';
+  document.getElementById('toggleRouteBtn').textContent = '🗺️ Ver ruta completa';
+  hideStartRouteConfirm();
+}
+
+// Manda una lectura de ubicacion al servidor (via socket si esta conectado,
+// si no por HTTP) y actualiza el estado en pantalla. La usan tanto el GPS
+// continuo (watchPosition) como la reconexion inmediata al volver a la
+// pestaña.
+function sendLocation(lat, lng) {
+  myLat = lat;
+  myLng = lng;
+  lastSentAt = Date.now();
+  setStatus(true);
+  if (routeVisible) updateMyLocationMarker();
+
+  const payload = { driver_id: driverId, lat, lng };
+  if (socket && socket.connected) {
+    socket.emit('driver:location', payload);
+  } else {
+    fetch('/api/driver/location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }
 }
 
 function startTracking() {
@@ -56,34 +144,139 @@ function startTracking() {
   socket = io();
 
   watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const { latitude, longitude } = pos.coords;
-      setStatus(true);
-      const payload = { driver_id: driverId, lat: latitude, lng: longitude };
-      if (socket && socket.connected) {
-        socket.emit('driver:location', payload);
-      } else {
-        fetch('/api/driver/location', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }).catch(() => {});
-      }
-    },
+    (pos) => sendLocation(pos.coords.latitude, pos.coords.longitude),
     (err) => {
       setStatus(false);
       console.error(err);
     },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
   );
+
+  // Refresca el "hace Xm" en pantalla aunque no llegue una lectura nueva
+  // todavia (para que no se quede pegado en "al instante" por minutos).
+  if (statusIntervalId) clearInterval(statusIntervalId);
+  statusIntervalId = setInterval(() => setStatus(lastSentAt != null), 5000);
 }
 
 async function pollNextStop() {
   try {
     const res = await fetch(`/api/driver/next-stop/${driverId}`);
     const data = await res.json();
+    routeStarted = data.routeStarted;
     renderStop(data.stop, data.remaining);
+    renderStartRouteBanner(data.stop, data.routeStarted);
+    if (routeVisible) loadRouteView();
   } catch (e) { /* red caida, se reintenta en el siguiente poll */ }
+}
+
+// Mientras no confirme "Iniciar ruta", no se manda ninguna alerta de Kommo
+// para su ruta (el backend la bloquea), tampoco puede ver la liga de Maps
+// ni marcar pedidos como entregados - el banner es el unico punto de
+// entrada a la pantalla de confirmacion (showStartRouteConfirm).
+function renderStartRouteBanner(stop, started) {
+  const banner = document.getElementById('startRouteBanner');
+  banner.style.display = stop && !started ? 'block' : 'none';
+}
+
+// Pantalla de confirmacion: antes de arrancar de verdad, el repartidor ve
+// el orden completo de entrega (lista + mapa) para revisarlo con calma.
+async function showStartRouteConfirm() {
+  document.getElementById('stopCard').style.display = 'none';
+  document.getElementById('remaining').style.display = 'none';
+  document.getElementById('toggleRouteBtn').style.display = 'none';
+  document.getElementById('routeSection').style.display = 'none';
+  document.getElementById('startRouteBanner').style.display = 'none';
+  document.getElementById('startRouteConfirmScreen').style.display = 'block';
+
+  try {
+    const res = await fetch(`/api/driver/route/${driverId}`);
+    const data = await res.json();
+    renderConfirmRouteList(data.stops);
+    renderConfirmRouteMap(data.stops);
+    setTimeout(() => confirmMap && confirmMap.invalidateSize(), 100);
+  } catch (e) { /* red caida, el repartidor puede cancelar y reintentar */ }
+}
+
+function hideStartRouteConfirm() {
+  document.getElementById('startRouteConfirmScreen').style.display = 'none';
+  document.getElementById('stopCard').style.display = '';
+  document.getElementById('remaining').style.display = '';
+  document.getElementById('toggleRouteBtn').style.display = '';
+}
+
+function cancelStartRouteConfirm() {
+  hideStartRouteConfirm();
+  pollNextStop(); // el banner vuelve a aparecer, sigue sin iniciar
+}
+
+async function confirmStartRoute() {
+  await fetch('/api/driver/start-route', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ driver_id: driverId }),
+  });
+  hideStartRouteConfirm();
+  pollNextStop();
+}
+
+function renderConfirmRouteList(stops) {
+  const list = document.getElementById('confirmRouteList');
+  if (!stops.length) {
+    list.innerHTML = '<div class="empty">No tienes pedidos asignados por ahora 🎉</div>';
+    return;
+  }
+  list.innerHTML = stops
+    .map(
+      (s) => `
+      <div class="route-item">
+        <span class="route-seq">${s.sequence}</span>
+        <span class="route-info">
+          <b>${s.name}</b><br>
+          <small>${s.address || ''}</small>
+        </span>
+      </div>
+    `
+    )
+    .join('');
+}
+
+function renderConfirmRouteMap(stops) {
+  if (!confirmMap) {
+    confirmMap = L.map('confirmRouteMap');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+    }).addTo(confirmMap);
+  }
+
+  confirmMarkers.forEach((m) => confirmMap.removeLayer(m));
+  confirmMarkers = [];
+
+  const bounds = [];
+  stops.forEach((s) => {
+    if (s.lat == null || s.lng == null) return;
+    const icon = L.divIcon({
+      html: `<div style="width:26px;height:26px;border-radius:50%;background:#2563eb;border:3px solid white;box-shadow:0 0 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;">${s.sequence}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      className: '',
+    });
+    const marker = L.marker([s.lat, s.lng], { icon }).addTo(confirmMap).bindPopup(s.name);
+    confirmMarkers.push(marker);
+    bounds.push([s.lat, s.lng]);
+  });
+
+  if (bounds.length) confirmMap.fitBounds(bounds, { padding: [30, 30] });
+  else confirmMap.setView([20.9674, -89.5926], 12);
+}
+
+// La factura puede venir como liga (la mostramos como boton) o como texto
+// plano (numero de factura, etc.) - se muestra distinto segun el caso.
+function invoiceHtml(invoice) {
+  if (!invoice) return '';
+  if (/^https?:\/\//i.test(invoice)) {
+    return `<a class="invoice-btn" href="${invoice}" target="_blank">🧾 Ver factura</a>`;
+  }
+  return `<p class="invoice-text">🧾 Factura: ${invoice}</p>`;
 }
 
 function renderStop(stop, remaining) {
@@ -94,24 +287,147 @@ function renderStop(stop, remaining) {
     remEl.textContent = '';
     return;
   }
+  // Sin "Iniciar ruta" confirmado, no hay liga de Maps ni boton de
+  // entregar - el backend tambien lo rechaza (ver /complete-stop), esto
+  // solo evita que aparezcan a medias.
+  const actionsHtml = routeStarted
+    ? `
+      <a class="maps-btn" style="display:block;text-align:center;text-decoration:none;color:white;border-radius:10px;padding:16px;font-weight:600;" href="${stop.mapsUrl}" target="_blank">📍 Abrir en Google Maps</a>
+      <button class="done-btn" onclick="completeStop(${stop.id})">✅ Marcar como entregado</button>
+    `
+    : `<p class="locked-note">🔒 Toca "Iniciar ruta" arriba para ver el mapa y poder marcar como entregado.</p>`;
+
   card.innerHTML = `
     <div class="card">
       <h2>${stop.name}</h2>
       <p>${stop.address || 'Sin dirección registrada'}</p>
-      <a class="maps-btn" style="display:block;text-align:center;text-decoration:none;color:white;border-radius:10px;padding:16px;font-weight:600;" href="${stop.mapsUrl}" target="_blank">📍 Abrir en Google Maps</a>
-      <button class="done-btn" onclick="completeStop(${stop.id})">✅ Marcar como entregado</button>
+      ${invoiceHtml(stop.invoice)}
+      ${actionsHtml}
     </div>
   `;
   remEl.textContent = `Paradas restantes: ${remaining}`;
 }
 
 async function completeStop(stopId) {
-  await fetch('/api/driver/complete-stop', {
+  const res = await fetch('/api/driver/complete-stop', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ stop_id: stopId }),
   });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'No se pudo marcar como entregado');
+  }
   pollNextStop();
+}
+
+// Vista de "ruta completa": util cuando un cliente no esta y el repartidor
+// quiere ver que mas le falta / saltarse uno mentalmente antes de volver.
+async function toggleRoute() {
+  routeVisible = !routeVisible;
+  document.getElementById('routeSection').style.display = routeVisible ? 'block' : 'none';
+  document.getElementById('toggleRouteBtn').textContent = routeVisible
+    ? '🔽 Ocultar ruta completa'
+    : '🗺️ Ver ruta completa';
+
+  if (routeVisible) {
+    await loadRouteView();
+    // Leaflet necesita medir el contenedor ya visible para dibujar bien.
+    setTimeout(() => routeMap && routeMap.invalidateSize(), 100);
+  }
+}
+
+async function loadRouteView() {
+  try {
+    const res = await fetch(`/api/driver/route/${driverId}`);
+    const data = await res.json();
+    renderRouteList(data.stops);
+    renderRouteMap(data.stops);
+  } catch (e) { /* red caida, se reintenta en el siguiente poll */ }
+}
+
+function renderRouteList(stops) {
+  const list = document.getElementById('routeList');
+  if (!stops.length) {
+    list.innerHTML = '<div class="empty">No tienes pedidos asignados por ahora 🎉</div>';
+    return;
+  }
+  list.innerHTML = stops
+    .map((s) => {
+      const done = s.status === 'delivered';
+      const invoiceIsLink = s.invoice && /^https?:\/\//i.test(s.invoice);
+      return `
+        <div class="route-item ${done ? 'done' : ''}">
+          <span class="route-seq">${done ? '✅' : s.sequence}</span>
+          <span class="route-info">
+            <b>${s.name}</b><br>
+            <small>${s.address || ''}</small>
+            ${s.invoice && !invoiceIsLink ? `<br><small>🧾 ${s.invoice}</small>` : ''}
+          </span>
+          ${invoiceIsLink ? `<a class="route-link" href="${s.invoice}" target="_blank">🧾</a>` : ''}
+          ${routeStarted ? `<a class="route-link" href="${s.mapsUrl}" target="_blank">📍</a>` : ''}
+        </div>
+      `;
+    })
+    .join('');
+}
+
+// Marcador de "aqui estoy yo" en el mapa de ruta completa, actualizado en
+// vivo cada vez que llega una posicion nueva del GPS (no solo al recargar
+// la ruta), asi el repartidor se ve moverse en el mapa igual que en admin.
+function updateMyLocationMarker() {
+  if (!routeMap || myLat == null || myLng == null) return;
+  const pos = [myLat, myLng];
+  if (myLocationMarker) {
+    myLocationMarker.setLatLng(pos);
+  } else {
+    myLocationMarker = L.marker(pos, {
+      icon: L.divIcon({
+        html: '<div style="font-size:30px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚚</div>',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        className: '',
+      }),
+      zIndexOffset: 1000,
+    }).addTo(routeMap).bindPopup('Tú estás aquí');
+  }
+}
+
+function renderRouteMap(stops) {
+  if (!routeMap) {
+    routeMap = L.map('routeMap');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+    }).addTo(routeMap);
+  }
+
+  routeMarkers.forEach((m) => routeMap.removeLayer(m));
+  routeMarkers = [];
+
+  const bounds = [];
+  stops.forEach((s) => {
+    const done = s.status === 'delivered';
+    const color = done ? '#16a34a' : '#2563eb';
+    const label = done ? '✅' : s.sequence;
+    const icon = L.divIcon({
+      html: `<div style="width:26px;height:26px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 0 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;">${label}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      className: '',
+    });
+    const marker = L.marker([s.lat, s.lng], { icon }).addTo(routeMap).bindPopup(s.name);
+    routeMarkers.push(marker);
+    bounds.push([s.lat, s.lng]);
+  });
+
+  updateMyLocationMarker();
+  if (myLat != null && myLng != null) bounds.push([myLat, myLng]);
+
+  if (bounds.length) {
+    routeMap.fitBounds(bounds, { padding: [30, 30] });
+  } else {
+    routeMap.setView([20.9674, -89.5926], 12);
+  }
 }
 
 if (driverId) startApp();

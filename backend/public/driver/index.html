@@ -6,6 +6,7 @@
 <title>Repartidor</title>
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#1d4ed8" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   * { box-sizing: border-box; }
   body {
@@ -14,6 +15,8 @@
     display: flex; flex-direction: column;
   }
   .header { padding: 16px; background: #1e293b; text-align: center; font-weight: 700; font-size: 18px; }
+  .driver-badge { font-size: 13px; font-weight: 400; margin-top: 4px; color: #cbd5e1; }
+  .driver-badge a { color: #93c5fd; }
   .status { padding: 8px 16px; text-align: center; font-size: 13px; }
   .status.on { color: #4ade80; }
   .status.off { color: #f87171; }
@@ -30,12 +33,33 @@
   .card p { margin: 4px 0; color: #cbd5e1; }
   .maps-btn { background: #16a34a; margin-top: 12px; }
   .done-btn { background: #64748b; margin-top: 8px; }
+  .start-route-btn { background: #7c3aed; font-size: 18px; padding: 18px; animation: pulse-start 1.8s ease-in-out infinite; }
+  @keyframes pulse-start { 0%, 100% { opacity: 1; } 50% { opacity: 0.75; } }
+  .invoice-btn { display: block; text-align: center; text-decoration: none; color: white; background: #7c3aed; border-radius: 10px; padding: 12px; font-weight: 600; margin-top: 8px; }
+  .invoice-text { font-size: 13px; }
   .remaining { font-size: 13px; color: #94a3b8; text-align: center; }
   .empty { text-align: center; color: #94a3b8; padding: 40px 0; }
+  .toggle-route-btn { background: #334155; font-size: 14px; padding: 12px; }
+  #routeMap { height: 220px; border-radius: 12px; margin-top: 12px; }
+  .route-item { display: flex; align-items: center; gap: 10px; background: #1e293b; border-radius: 10px; padding: 10px; margin-top: 8px; }
+  .route-item.done { opacity: 0.5; }
+  .route-seq { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; min-width: 26px; border-radius: 50%; background: #2563eb; color: white; font-weight: 700; font-size: 13px; }
+  .route-item.done .route-seq { background: #16a34a; }
+  .route-info { flex: 1; font-size: 13px; }
+  .route-link { color: #93c5fd; text-decoration: none; font-size: 20px; }
+  .locked-note { font-size: 13px; color: #94a3b8; text-align: center; margin-top: 12px; }
+  #confirmRouteMap { height: 220px; border-radius: 12px; margin-top: 12px; }
+  .btn-confirm-start { background: #16a34a; margin-top: 14px; }
+  .btn-cancel-start { background: #334155; font-size: 14px; padding: 12px; margin-top: 8px; }
 </style>
 </head>
 <body>
-  <div class="header">🚚 Repartidor</div>
+  <div class="header">
+    🚚 Repartidor
+    <div id="driverBadge" class="driver-badge" style="display:none;">
+      <span id="driverNameLabel"></span> · <a href="#" onclick="logout(); return false;">Cambiar de repartidor</a>
+    </div>
+  </div>
   <div id="statusBar" class="status off">Ubicación: inactiva</div>
 
   <div id="login">
@@ -44,10 +68,28 @@
   </div>
 
   <div id="app">
+    <div id="startRouteBanner" style="display:none;">
+      <button class="start-route-btn" onclick="showStartRouteConfirm()">🚀 Iniciar ruta</button>
+    </div>
     <div id="stopCard"></div>
     <div class="remaining" id="remaining"></div>
+
+    <button id="toggleRouteBtn" class="toggle-route-btn" onclick="toggleRoute()">🗺️ Ver ruta completa</button>
+    <div id="routeSection" style="display:none;">
+      <div id="routeMap"></div>
+      <div id="routeList"></div>
+    </div>
+
+    <div id="startRouteConfirmScreen" style="display:none;">
+      <h2 style="text-align:center;margin:8px 0 12px;">📋 Orden de entrega</h2>
+      <div id="confirmRouteList"></div>
+      <div id="confirmRouteMap"></div>
+      <button class="btn-confirm-start" onclick="confirmStartRoute()">✅ Confirmar inicio de ruta</button>
+      <button class="btn-cancel-start" onclick="cancelStartRouteConfirm()">‹ Cancelar</button>
+    </div>
   </div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="app.js"></script>
 </body>

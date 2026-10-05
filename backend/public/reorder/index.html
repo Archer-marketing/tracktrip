@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<meta name="theme-color" content="#5b9a3b" />
+<title>Uchben — Reacomodar ruta</title>
+<style>
+  :root {
+    --green-dark: #5b9a3b;
+    --green-darker: #487a2f;
+    --green-light: #b9d97a;
+    --ink: #16210f;
+    --paper: #fbfbf8;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; font-family: -apple-system, system-ui, sans-serif;
+    background: var(--paper); color: var(--ink); min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  .header { padding: 14px 16px; background: white; border-bottom: 1px solid #eceee6; display: flex; align-items: center; gap: 10px; }
+  .header .logo-img { display: none; height: 30px; }
+  .header .brand { font-size: 16px; font-weight: 800; }
+  .header .brand .leaf { color: var(--green-dark); }
+  .header .brand-sub { font-size: 11px; color: #6b7566; font-weight: 500; }
+
+  #gate { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  #gate .box { text-align: center; width: 100%; max-width: 320px; }
+  #gate .logo-img { display: none; max-height: 56px; margin: 0 auto 10px; }
+  #gate .brand { font-size: 20px; font-weight: 800; }
+  #gate .brand .leaf { color: var(--green-dark); }
+  #gate .brand-sub { font-size: 12px; color: #6b7566; margin: 2px 0 16px; }
+
+  input, select, button { width: 100%; padding: 14px; font-size: 16px; border-radius: 10px; border: 1px solid #cbd5e1; margin-top: 10px; }
+  button { background: var(--green-dark); color: white; border: none; font-weight: 700; cursor: pointer; }
+  button:active { background: var(--green-darker); }
+  button:disabled { opacity: 0.4; }
+  .error-msg { color: #b91c1c; font-size: 13px; margin-top: 8px; min-height: 16px; }
+
+  #app { display: none; flex: 1; flex-direction: column; padding: 16px; gap: 12px; }
+  .driver-select-row { display: flex; gap: 8px; align-items: center; }
+  .driver-select-row select { margin-top: 0; }
+  .hint { font-size: 12px; color: #6b7566; text-align: center; }
+  .empty { text-align: center; color: #6b7566; padding: 40px 16px; }
+
+  #list { display: flex; flex-direction: column; gap: 10px; }
+  .reorder-item {
+    display: flex; align-items: center; gap: 10px; background: white;
+    border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px;
+    user-select: none; transition: box-shadow .15s ease;
+  }
+  .reorder-item.dragging { box-shadow: 0 8px 20px rgba(0,0,0,.18); z-index: 10; position: relative; }
+  .reorder-seq {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; min-width: 26px; border-radius: 50%;
+    background: var(--green-dark); color: white; font-weight: 700; font-size: 12px;
+  }
+  .reorder-info { flex: 1; min-width: 0; }
+  .reorder-info b { display: block; font-size: 14px; }
+  .reorder-info small { color: #6b7566; font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drag-handle {
+    width: 44px; height: 44px; min-width: 44px; display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #94a3b8; cursor: grab; touch-action: none; border-radius: 8px;
+  }
+  .drag-handle:active { cursor: grabbing; background: #f1f5f9; }
+
+  #saveBar { display: none; position: sticky; bottom: 0; padding: 12px 16px; background: var(--paper); border-top: 1px solid #eceee6; }
+  #saveBar button { margin-top: 0; }
+  .save-status { font-size: 12px; color: var(--green-darker); text-align: center; margin-top: 6px; min-height: 16px; }
+</style>
+</head>
+<body>
+
+<div class="header" id="topHeader" style="display:none;">
+  <img id="headerLogo" class="logo-img" src="logo.png" alt="Uchben"
+    onload="this.style.display='block'; document.getElementById('headerBrandFallback').style.display='none';"
+    onerror="this.style.display='none';" />
+  <div id="headerBrandFallback">
+    <div class="brand"><span class="leaf">🌿</span> UCHBEN</div>
+    <div class="brand-sub">Reacomodar ruta</div>
+  </div>
+</div>
+
+<div id="gate">
+  <div class="box">
+    <img id="gateLogo" class="logo-img" src="logo.png" alt="Uchben"
+      onload="this.style.display='block'; document.getElementById('gateBrandFallback').style.display='none';"
+      onerror="this.style.display='none';" />
+    <div class="brand" id="gateBrandFallback"><span class="leaf">🌿</span> UCHBEN</div>
+    <div class="brand-sub">Reacomodar ruta</div>
+    <input id="pass" type="password" placeholder="Código de acceso" autocomplete="off" />
+    <button onclick="enter()">Entrar</button>
+    <div class="error-msg" id="gateError"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="driver-select-row">
+    <select id="driverSelect" onchange="onDriverChange()"></select>
+  </div>
+  <div class="hint">Arrastra con el ☰ para cambiar el orden</div>
+  <div id="list"></div>
+  <div id="emptyMsg" class="empty" style="display:none;">Este repartidor no tiene ruta activa ahorita.</div>
+</div>
+
+<div id="saveBar">
+  <button id="saveBtn" onclick="saveOrder()">💾 Guardar orden</button>
+  <div class="save-status" id="saveStatus"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
