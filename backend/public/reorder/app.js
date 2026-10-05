@@ -121,8 +121,21 @@ function renderList() {
 
 function startDrag(e, item) {
   e.preventDefault();
-  dragging = { el: item, pointerId: e.pointerId, startY: e.clientY };
+  const list = document.getElementById('list');
+  const items = [...list.querySelectorAll('.reorder-item')];
+  dragging = {
+    el: item,
+    pointerId: e.pointerId,
+    startY: e.clientY,
+    startIndex: items.indexOf(item),
+    // Posiciones originales de todos (sin mover nada) - el orden solo se
+    // recalcula una vez al soltar, en vez de ir empujando a los demas
+    // mientras arrastras (eso era lo que se sentia "feo" en el celular).
+    itemRects: items.map((el) => el.getBoundingClientRect()),
+  };
   item.classList.add('dragging');
+  item.style.position = 'relative';
+  item.style.zIndex = 10;
   try {
     item.setPointerCapture(e.pointerId);
   } catch (err) {}
@@ -134,46 +147,46 @@ function onDragMove(e) {
   if (!dragging) return;
   const deltaY = e.clientY - dragging.startY;
   dragging.el.style.transform = `translateY(${deltaY}px)`;
+}
 
-  const list = document.getElementById('list');
-  const items = [...list.querySelectorAll('.reorder-item')];
-  const draggedRect = dragging.el.getBoundingClientRect();
-  const draggedMid = draggedRect.top + draggedRect.height / 2;
-  const draggedPos = items.indexOf(dragging.el);
+function onDragEnd(e) {
+  if (!dragging) return;
+  const { el, pointerId, startIndex, itemRects, startY } = dragging;
+  const deltaY = (e && e.clientY != null ? e.clientY : startY) - startY;
 
-  for (const other of items) {
-    if (other === dragging.el) continue;
-    const rect = other.getBoundingClientRect();
-    const otherMid = rect.top + rect.height / 2;
-    const otherPos = items.indexOf(other);
-
-    if (otherPos < draggedPos && draggedMid < otherMid) {
-      list.insertBefore(dragging.el, other);
-      break;
-    } else if (otherPos > draggedPos && draggedMid > otherMid) {
-      list.insertBefore(dragging.el, other.nextSibling);
+  // Centro final del elemento arrastrado = su posicion original + cuanto
+  // se movio - comparado contra las posiciones ORIGINALES de los demas
+  // (nadie se movio todavia) para decidir donde cae.
+  const draggedMid = itemRects[startIndex].top + itemRects[startIndex].height / 2 + deltaY;
+  let targetIndex = itemRects.length - 1;
+  for (let i = 0; i < itemRects.length; i++) {
+    const mid = itemRects[i].top + itemRects[i].height / 2;
+    if (draggedMid < mid) {
+      targetIndex = i;
       break;
     }
   }
-}
+  const insertIndex = targetIndex > startIndex ? targetIndex - 1 : targetIndex;
 
-function onDragEnd() {
-  if (!dragging) return;
-  const el = dragging.el;
   el.classList.remove('dragging');
   el.style.transform = '';
+  el.style.position = '';
+  el.style.zIndex = '';
   try {
-    el.releasePointerCapture(dragging.pointerId);
+    el.releasePointerCapture(pointerId);
   } catch (err) {}
   document.removeEventListener('pointermove', onDragMove);
   document.removeEventListener('pointerup', onDragEnd);
   dragging = null;
 
-  const list = document.getElementById('list');
-  const newOrderIds = [...list.querySelectorAll('.reorder-item')].map((e) => Number(e.dataset.stopId));
-  currentStops = newOrderIds.map((id) => currentStops.find((s) => s.id === id));
+  if (insertIndex !== startIndex) {
+    const moved = currentStops[startIndex];
+    currentStops.splice(startIndex, 1);
+    currentStops.splice(insertIndex, 0, moved);
+  }
   renderList();
 
+  const newOrderIds = currentStops.map((s) => s.id);
   const changed = newOrderIds.some((id, idx) => id !== originalOrderIds[idx]);
   if (changed) showSaveBar();
   else hideSaveBar();
